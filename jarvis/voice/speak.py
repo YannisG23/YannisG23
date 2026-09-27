@@ -30,9 +30,31 @@ def clean_for_speech(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def synth_edge(text: str, voice: str, rate: str = "+0%") -> np.ndarray:
+    """Synthétise une phrase avec une voix neuronale Microsoft Edge (nécessite internet)."""
+    import edge_tts
+    import miniaudio
+
+    async def synthesize() -> bytes:
+        audio = bytearray()
+        communicate = edge_tts.Communicate(text, voice, rate=rate)
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio.extend(chunk["data"])
+        return bytes(audio)
+
+    mp3 = asyncio.run(synthesize())
+    decoded = miniaudio.decode(
+        mp3, output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1, sample_rate=SAMPLE_RATE
+    )
+    return np.array(decoded.samples, dtype=np.int16)
+
+
 class Speaker:
     def __init__(self, voice: str, rate: str = "+0%",
                  on_state: Callable[[bool], None] | None = None) -> None:
+        import sounddevice  # noqa: F401  (échoue tout de suite s'il n'y a pas d'audio)
+
         self.voice = voice
         self.rate = rate
         self.on_state = on_state or (lambda speaking: None)
@@ -114,22 +136,7 @@ class Speaker:
                 self._done_one()
 
     def _synth_edge(self, text: str) -> np.ndarray:
-        import edge_tts
-        import miniaudio
-
-        async def synthesize() -> bytes:
-            audio = bytearray()
-            communicate = edge_tts.Communicate(text, self.voice, rate=self.rate)
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio.extend(chunk["data"])
-            return bytes(audio)
-
-        mp3 = asyncio.run(synthesize())
-        decoded = miniaudio.decode(
-            mp3, output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1, sample_rate=SAMPLE_RATE
-        )
-        return np.array(decoded.samples, dtype=np.int16)
+        return synth_edge(text, self.voice, self.rate)
 
     def _synth_offline(self, text: str) -> np.ndarray:
         """Voix du système (hors ligne), rendue dans un fichier WAV puis rééchantillonnée."""

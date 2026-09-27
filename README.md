@@ -24,28 +24,36 @@ Son cerveau est **Claude** (API Anthropic). L'écoute, la voix, la mémoire et l
 
 ## Installation
 
-Il te faut **Python 3.10 à 3.12** (Windows, macOS ou Linux), un micro et des haut-parleurs.
+Il te faut **Python 3.10 à 3.12** (Windows, macOS ou Linux), un micro et des haut-parleurs, ainsi qu'une clé d'API Anthropic : https://console.anthropic.com/settings/keys (usage payant à la consommation).
+
+### En un clic
+
+- **Windows** : double-clique sur `install.bat`. Il installe tout, ouvre le fichier `.env` pour que tu y colles ta clé, ton prénom et ta ville, puis lance le diagnostic. Ensuite, lance Jarvis avec `jarvis.bat`.
+- **macOS / Linux** : `./install.sh`, remplis `.env`, puis `./jarvis.sh`.
+
+### À la main
 
 ```bash
-git clone <ce dépôt> jarvis && cd jarvis
 python -m venv .venv
 # Windows : .venv\Scripts\activate    macOS/Linux : source .venv/bin/activate
 pip install -e ".[all]"
+cp .env.example .env        # puis remplis ta clé, ton prénom, ta ville
 ```
 
-1. Crée une clé d'API sur https://console.anthropic.com/settings/keys (usage payant à la consommation).
-2. Copie `.env.example` en `.env`, colle ta clé et règle ton prénom et ta ville.
-3. Lance :
+### Utilisation
 
 ```bash
-python -m jarvis            # tout : voix + centre de commande (s'ouvre dans le navigateur)
+python -m jarvis --doctor   # vérifie tout : clé, micro, haut-parleurs, voix, Whisper, Google
+python -m jarvis            # voix + centre de commande (s'ouvre dans le navigateur)
 python -m jarvis --text     # sans micro ni voix : clavier + centre de commande
 python -m jarvis --memory   # voir ce que Jarvis a retenu de toi
 ```
 
-Au premier lancement, le modèle de reconnaissance vocale Whisper (~500 Mo pour `small`) et le modèle « Hey Jarvis » se téléchargent automatiquement.
+Au premier lancement, le modèle de reconnaissance vocale Whisper (~500 Mo pour `small`) et le modèle « Hey Jarvis » se téléchargent automatiquement. Si le micro pose problème, Jarvis démarre quand même, au clavier et dans le centre de commande.
 
 Le lien du centre de commande s'affiche dans le terminal (`http://127.0.0.1:8765/#token=…`). Garde l'onglet ouvert. Si tu le fermes, reprends le lien depuis le terminal.
+
+Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda, e-mails, tâches) au lieu d'un simple bonjour (`JARVIS_DAILY_BRIEFING=0` pour le désactiver).
 
 ### Connecter Gmail et Google Agenda (optionnel)
 
@@ -73,6 +81,7 @@ Le lien du centre de commande s'affiche dans le terminal (`http://127.0.0.1:8765
 | `JARVIS_WHISPER_MODEL` | Précision de l'écoute : `base`, `small`, `medium`, `large-v3` | `small` |
 | `JARVIS_WAKE_THRESHOLD` | Sensibilité de « Hey Jarvis » (plus bas = plus sensible) | `0.5` |
 | `JARVIS_FOLLOW_UP_SECONDS` | Attente d'une suite sans mot d'activation | `6` |
+| `JARVIS_DAILY_BRIEFING` | Briefing au premier lancement de la matinée | `1` |
 | `JARVIS_IDLE_MINUTES` | Inactivité avant de ranger la conversation en mémoire | `20` |
 | `JARVIS_EVENT_REMINDER_MINUTES` | Avance des rappels de rendez-vous (0 = désactivé) | `10` |
 | `JARVIS_DASHBOARD_PORT` | Port du centre de commande | `8765` |
@@ -93,6 +102,7 @@ Pour des réponses plus rapides : `JARVIS_EFFORT=low`. Avec une carte graphique 
 ```
 jarvis/
 ├── __main__.py          # ligne de commande
+├── doctor.py            # diagnostic de l'installation
 ├── app.py               # lancement : noyau + voix + centre de commande + terminal
 ├── core.py              # noyau : file de requêtes, bus d'événements, confirmations, tâches de fond
 ├── brain.py             # Claude en streaming : persona, outils, rappel de souvenirs, consolidation

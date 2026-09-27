@@ -45,6 +45,10 @@ class Config:
 
     # Centre de commande
     dashboard_port: int = field(default_factory=lambda: int(_env("JARVIS_DASHBOARD_PORT", "8765")))
+    # Briefing automatique au premier lancement de la matinée.
+    daily_briefing: bool = field(
+        default_factory=lambda: _env("JARVIS_DAILY_BRIEFING", "1").lower() not in {"0", "false", "non", "no"}
+    )
     # Minutes d'avance pour prévenir d'un rendez-vous (0 = désactivé).
     event_reminder_minutes: int = field(default_factory=lambda: int(_env("JARVIS_EVENT_REMINDER_MINUTES", "10")))
 

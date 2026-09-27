@@ -84,7 +84,7 @@ class Listener:
             frame = self._next_frame(timeout=0.2)
             if frame is None:
                 continue
-            self.level = _rms(frame)
+            self._observe(frame)
             scores = self.wake.predict(frame)
             if max(scores.values(), default=0.0) >= self.wake_threshold:
                 self.flush()
@@ -97,12 +97,22 @@ class Listener:
             frame = self._next_frame(timeout=0.05)
             if frame is None:
                 return
-            self.level = _rms(frame)
+            self._observe(frame, adapt=False)  # pas d'adaptation : Jarvis parle peut-être
+
+    def _observe(self, frame: np.ndarray, adapt: bool = True) -> None:
+        """Met à jour le niveau affiché et, en silence, suit l'évolution du bruit de fond."""
+        self.level = _rms(frame)
+        if adapt and self.level < self.speech_threshold:
+            self.noise_floor = 0.995 * self.noise_floor + 0.005 * self.level
+
+    @property
+    def speech_threshold(self) -> float:
+        return max(self.noise_floor * 3.0, 250.0)
 
     def record_utterance(self, start_timeout: float = 6.0, max_seconds: float = 20.0,
                          end_silence: float = 0.9) -> np.ndarray | None:
         """Enregistre une phrase : attend qu'on parle, puis s'arrête après un silence."""
-        threshold = max(self.noise_floor * 3.0, 400.0)
+        threshold = self.speech_threshold
         frames: list[np.ndarray] = []
         started = False
         silent_for = 0.0

@@ -419,3 +419,17 @@ def test_format_weather():
     }
     out = format_weather("Paris, France", data)
     assert "partiellement nuageux, 18°C" in out and "pluie légère, 11 à 20°C, pluie 70%" in out
+
+
+def test_first_launch_today_and_greeting(config):
+    from datetime import datetime
+
+    from jarvis.app import _first_launch_today, _greeting
+
+    morning = datetime(2026, 9, 28, 8, 30)
+    assert _first_launch_today(config, morning)
+    assert not _first_launch_today(config, morning.replace(hour=11))
+    assert _first_launch_today(config, datetime(2026, 9, 29, 7, 0))
+    assert _greeting(config, morning).startswith("Bonjour Yannis")
+    assert _greeting(config, morning.replace(hour=20)).startswith("Bonsoir")
+    assert "debout" in _greeting(config, morning.replace(hour=2))
