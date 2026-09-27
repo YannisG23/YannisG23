@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "J.A.R.V.I.S. — assistant personnel vocal propulsé par Claude"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=1.8",
+    "python-dotenv>=1.0",
+    "rich>=13",
+    "requests>=2.31",
+    "psutil>=5.9",
+    "pyautogui>=0.9.54",
+    "pyperclip>=1.8",
+    "Pillow>=10",
+]
+
+[project.optional-dependencies]
+voice = [
+    "numpy>=1.24",
+    "sounddevice>=0.4.6",
+    "faster-whisper>=1.0",
+    "openwakeword>=0.6",
+    "edge-tts>=6.1",
+    "miniaudio>=1.59",
+    "pyttsx3>=2.90",
+]
+google = [
+    "google-api-python-client>=2.100",
+    "google-auth-oauthlib>=1.1",
+]
+all = ["jarvis[voice,google]"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+jarvis = "jarvis.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["jarvis*"]
