@@ -1,24 +1,26 @@
 # J.A.R.V.I.S. — ton assistant personnel
 
-Un Jarvis de bureau façon Iron Man : tu dis « **Hey Jarvis** », tu parles, il te répond à voix haute et agit sur ton ordinateur, tes e-mails et ton agenda. Il se souvient aussi de toi d'une conversation à l'autre.
+Un Jarvis de bureau façon Iron Man : tu dis « **Hey Jarvis** », tu parles, il te répond avec une voix naturelle et agit sur ton ordinateur, tes e-mails, ton agenda et tes tâches. Il se souvient de toi d'une conversation à l'autre, et tout se pilote depuis un **centre de commande** dans ton navigateur.
 
-Son cerveau est **Claude** (API Anthropic). La voix et l'écoute tournent sur ton PC.
+Son cerveau est **Claude** (API Anthropic). L'écoute, la voix, la mémoire et le centre de commande tournent sur ton PC.
 
 ## Ce qu'il sait faire
 
-| Domaine | Exemples de demandes |
+| Domaine | Exemples |
 |---|---|
-| Conversation vocale | Mot d'activation « Hey Jarvis », mode conversation (tu enchaînes sans redire « Hey Jarvis »), voix neuronale française |
-| Contrôle du PC | « Ouvre Spotify », « Mets du lo-fi sur YouTube », « Monte le son », « Morceau suivant », « Regarde mon écran, c'est quoi cette erreur ? », « Copie ça dans le presse-papiers », « État du PC ? » |
-| Fichiers | « Trouve mes PDF de factures », « Qu'est-ce qu'il y a dans Téléchargements ? », « Lis ce fichier », « Écris-moi une note sur le bureau » |
-| Web | Recherche web en direct (actus, résultats sportifs, prix...), météo |
+| Conversation vocale | « Hey Jarvis », puis mode conversation (tu enchaînes sans le redire). Il commence à parler dès la première phrase de sa réponse, et tu peux l'interrompre (Échap ou bouton ■). |
+| Centre de commande | Réacteur animé (veille, écoute, réflexion, parole), conversation en direct, état du PC, météo, agenda, e-mails, mémoire modifiable, tâches, minuteurs, journal des actions, boutons « Briefing » et « Nouvelle conversation ». |
+| Mémoire | Il retient seul ce qui compte (goûts, proches, projets, habitudes), retrouve les souvenirs utiles à chaque message et résume chaque conversation. Tu peux lui demander « de quoi on a parlé mardi ? ». |
+| Briefing | « Fais-moi le point » : date, météo, agenda du jour, e-mails importants, tâches. |
+| Contrôle du PC | « Ouvre Spotify », « Mets du lo-fi », « Monte le son », « Regarde mon écran, c'est quoi cette erreur ? », « Qu'est-ce qui ralentit mon PC ? » |
+| Fichiers | « Trouve mes PDF de factures », « Lis ce fichier », « Écris une note sur le bureau » |
+| Web | Recherche web en direct et lecture de pages, météo |
 | Gmail | « J'ai des nouveaux mails ? », « Lis-moi le mail de Léa », « Réponds-lui que je suis d'accord » |
-| Agenda Google | « Qu'est-ce que j'ai demain ? », « Ajoute un rendez-vous chez le dentiste jeudi à 15 h » |
-| Minuteurs et rappels | « Rappelle-moi de sortir les pâtes dans 10 minutes » |
-| Mémoire long terme | « Retiens que ma sœur s'appelle Léa » ; il retient aussi seul ce qui compte (goûts, projets, proches) |
-| Terminal | « Lance la commande ... » |
+| Agenda Google | « Qu'est-ce que j'ai demain ? », « Ajoute dentiste jeudi à 15 h ». Il te prévient 10 minutes avant chaque rendez-vous. |
+| Tâches et rappels | « Ajoute réviser le partiel à ma liste pour vendredi », « Rappelle-moi de sortir les pâtes dans 10 minutes » |
+| Terminal | « Lance la commande … » |
 
-**Sécurité** : exécuter une commande, envoyer un e-mail, écrire un fichier ou modifier l'agenda demande toujours ton « oui » explicite. Le contenu des e-mails et des pages web est traité comme une donnée, pas comme un ordre.
+**Sécurité** : exécuter une commande, envoyer un e-mail, écrire un fichier ou modifier l'agenda demande toujours ton accord (« oui » à la voix, bouton dans le centre de commande, ou « o » dans le terminal). Le contenu des e-mails et des pages web est traité comme une donnée, jamais comme un ordre. Le centre de commande n'est accessible que depuis ton PC, avec un jeton secret renouvelé à chaque lancement.
 
 ## Installation
 
@@ -36,59 +38,79 @@ pip install -e ".[all]"
 3. Lance :
 
 ```bash
-python -m jarvis           # mode vocal (dis « Hey Jarvis »)
-python -m jarvis --text    # mode clavier, pratique pour tester
-python -m jarvis --memory  # voir ce que Jarvis a retenu de toi
+python -m jarvis            # tout : voix + centre de commande (s'ouvre dans le navigateur)
+python -m jarvis --text     # sans micro ni voix : clavier + centre de commande
+python -m jarvis --memory   # voir ce que Jarvis a retenu de toi
 ```
 
 Au premier lancement, le modèle de reconnaissance vocale Whisper (~500 Mo pour `small`) et le modèle « Hey Jarvis » se téléchargent automatiquement.
+
+Le lien du centre de commande s'affiche dans le terminal (`http://127.0.0.1:8765/#token=…`). Garde l'onglet ouvert. Si tu le fermes, reprends le lien depuis le terminal.
 
 ### Connecter Gmail et Google Agenda (optionnel)
 
 1. Va sur https://console.cloud.google.com, crée un projet, puis active **Gmail API** et **Google Calendar API**.
 2. Dans *Google Auth Platform* : écran de consentement en mode « Externe », puis ajoute ton adresse Gmail comme **utilisateur test**.
 3. *Clients* → *Créer un client* → type **Application de bureau** → télécharge le JSON.
-4. Renomme-le `google_credentials.json` et place-le dans le dossier `~/.jarvis/` (sous Windows : `C:\Users\<toi>\.jarvis\`).
+4. Renomme-le `google_credentials.json` et place-le dans `~/.jarvis/` (sous Windows : `C:\Users\<toi>\.jarvis\`).
 5. Lance `python -m jarvis --setup-google` et accepte les autorisations dans le navigateur.
 
-## Réglages utiles (`.env`)
+## Comment fonctionne sa mémoire
+
+- **Faits** : ce qu'il sait de toi, classés par catégorie et par importance (détail, utile, essentiel). Les essentiels et les plus utilisés sont toujours présents à son esprit. Les autres sont retrouvés automatiquement quand ton message en parle.
+- **Conversations** : après 20 minutes sans échange, quand tu cliques sur « Nouvelle conversation », quand tu quittes, ou quand une conversation devient très longue, Jarvis la résume et en extrait les nouvelles infos durables. Les derniers résumés sont repris au début de chaque conversation.
+- **Journal** : tout est archivé et consultable (« qu'est-ce que je t'avais dit sur le voyage ? »).
+- Tout est stocké en local dans `~/.jarvis/memory.sqlite3`. Tu peux corriger, noter ou supprimer chaque souvenir depuis l'onglet **Mémoire** du centre de commande.
+
+## Réglages (`.env`)
 
 | Variable | Rôle | Défaut |
 |---|---|---|
 | `JARVIS_MODEL` | Modèle Claude | `claude-opus-5` |
 | `JARVIS_EFFORT` | Profondeur de réflexion : `low` (plus rapide), `medium`, `high` | `medium` |
-| `JARVIS_VOICE` | Voix (`edge-tts --list-voices`) | `fr-FR-HenriNeural` |
+| `JARVIS_VOICE` | Voix (`edge-tts --list-voices`) | `fr-FR-RemyMultilingualNeural` |
+| `JARVIS_VOICE_RATE` | Débit de parole | `+5%` |
 | `JARVIS_WHISPER_MODEL` | Précision de l'écoute : `base`, `small`, `medium`, `large-v3` | `small` |
 | `JARVIS_WAKE_THRESHOLD` | Sensibilité de « Hey Jarvis » (plus bas = plus sensible) | `0.5` |
-| `JARVIS_FOLLOW_UP_SECONDS` | Durée d'attente d'une suite sans mot d'activation | `6` |
+| `JARVIS_FOLLOW_UP_SECONDS` | Attente d'une suite sans mot d'activation | `6` |
+| `JARVIS_IDLE_MINUTES` | Inactivité avant de ranger la conversation en mémoire | `20` |
+| `JARVIS_EVENT_REMINDER_MINUTES` | Avance des rappels de rendez-vous (0 = désactivé) | `10` |
+| `JARVIS_DASHBOARD_PORT` | Port du centre de commande | `8765` |
 
+Autres voix naturelles en français : `fr-FR-VivienneMultilingualNeural`, `fr-FR-HenriNeural`, `fr-FR-DeniseNeural`, `fr-CA-ThierryNeural`.
 Pour des réponses plus rapides : `JARVIS_EFFORT=low`. Avec une carte graphique NVIDIA, Whisper l'utilise automatiquement, et `medium` ou `large-v3` deviennent confortables.
 
 ## Dépannage
 
-- **Il ne réagit pas à « Hey Jarvis »** : baisse `JARVIS_WAKE_THRESHOLD` à `0.3`. Si le modèle ne se charge pas, Jarvis passe en mode « appuie sur Entrée pour parler ».
-- **Linux** : il faut `portaudio` (`sudo apt install libportaudio2`) et, pour le mot d'activation, `tflite-runtime` n'existe pas pour tous les Python : utilise Python 3.10 ou 3.11.
-- **macOS** : autorise le micro pour ton terminal, ainsi que l'*Accessibilité* (touches média) et l'*Enregistrement de l'écran* (« regarde mon écran »).
-- **Il se coupe trop tôt ou trop tard** : parle après le bip ; la fin de phrase est détectée après environ une seconde de silence.
+- **Il ne réagit pas à « Hey Jarvis »** : baisse `JARVIS_WAKE_THRESHOLD` à `0.3`. Si le modèle ne se charge pas, clique sur le micro du centre de commande, ou appuie sur Entrée dans le terminal.
+- **Il s'entend parler** : utilise un casque, ou baisse le volume des haut-parleurs.
+- **Linux** : il faut `portaudio` (`sudo apt install libportaudio2`). Pour le mot d'activation, `tflite-runtime` n'existe pas pour toutes les versions de Python : utilise Python 3.10 ou 3.11.
+- **macOS** : autorise, pour ton terminal, le micro, l'*Accessibilité* (touches média) et l'*Enregistrement de l'écran* (« regarde mon écran »).
+- **Port occupé** : change `JARVIS_DASHBOARD_PORT`.
 
 ## Architecture
 
 ```
 jarvis/
-├── __main__.py        # ligne de commande
-├── app.py             # boucles vocale et texte, confirmations
-├── brain.py           # Claude : persona, boucle d'outils, recherche web, cache de prompt
-├── memory.py          # mémoire long terme (SQLite dans ~/.jarvis)
-├── config.py          # réglages (.env)
+├── __main__.py          # ligne de commande
+├── app.py               # lancement : noyau + voix + centre de commande + terminal
+├── core.py              # noyau : file de requêtes, bus d'événements, confirmations, tâches de fond
+├── brain.py             # Claude en streaming : persona, outils, rappel de souvenirs, consolidation
+├── memory.py            # mémoire SQLite : faits, conversations résumées, journal, tâches
+├── config.py            # réglages (.env)
 ├── voice/
-│   ├── listen.py      # micro, « Hey Jarvis » (openWakeWord), Whisper (faster-whisper)
-│   └── speak.py       # voix neuronale (edge-tts), repli hors ligne (pyttsx3)
-└── tools/             # ce que Jarvis peut faire
-    ├── system_tools.py   # applis, médias, écran, presse-papiers, minuteurs, terminal
-    ├── file_tools.py     # fichiers
-    ├── web_tools.py      # météo
-    ├── google_tools.py   # Gmail et Agenda
-    └── memory_tools.py   # retenir, retrouver, oublier
+│   ├── listen.py        # micro, « Hey Jarvis » (openWakeWord), Whisper (faster-whisper)
+│   ├── speak.py         # voix neuronale (edge-tts) en file, repli hors ligne (pyttsx3)
+│   └── loop.py          # boucle vocale : mot d'activation, conversation, confirmations
+├── dashboard/
+│   ├── server.py        # serveur local + API + flux d'événements en direct (SSE)
+│   └── static/          # interface du centre de commande
+└── tools/               # ce que Jarvis sait faire
+    ├── system_tools.py  # applis, médias, écran, presse-papiers, processus, minuteurs, terminal
+    ├── file_tools.py    # fichiers
+    ├── web_tools.py     # météo
+    ├── google_tools.py  # Gmail et Agenda
+    └── memory_tools.py  # mémoire, conversations, tâches
 ```
 
 Pour ajouter une capacité, écris une fonction décorée avec `@registry.tool(...)` dans `jarvis/tools/` : Claude la découvre et l'utilise tout seul.

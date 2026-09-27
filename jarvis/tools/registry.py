@@ -10,6 +10,16 @@ from typing import Any, Callable
 ToolOutput = str | list[dict[str, Any]]
 
 
+_TYPE_CHECKS: dict[str, Callable[[Any], bool]] = {
+    "string": lambda v: isinstance(v, str),
+    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+    "boolean": lambda v: isinstance(v, bool),
+    "object": lambda v: isinstance(v, dict),
+    "array": lambda v: isinstance(v, list),
+}
+
+
 @dataclass
 class ToolContext:
     """Ce que les outils peuvent utiliser pour interagir avec l'application."""
@@ -31,7 +41,34 @@ class Tool:
     takes_context: bool = False
 
     def definition(self) -> dict[str, Any]:
-        return {"name": self.name, "description": self.description, "input_schema": self.input_schema}
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+            # Les réponses sont diffusées en continu : les arguments arrivent sans tampon
+            # côté API, donc on les valide nous-mêmes (validate) avant d'exécuter l'outil.
+            "eager_input_streaming": True,
+        }
+
+    def validate(self, args: Any) -> str | None:
+        """Renvoie un message d'erreur si les arguments ne respectent pas le schéma, sinon None."""
+        if not isinstance(args, dict):
+            return "les arguments doivent être un objet JSON"
+        props = self.input_schema.get("properties", {})
+        missing = [k for k in self.input_schema.get("required", []) if k not in args]
+        if missing:
+            return f"arguments manquants : {', '.join(missing)}"
+        unknown = [k for k in args if k not in props]
+        if unknown:
+            return f"arguments inconnus : {', '.join(unknown)}"
+        for key, value in args.items():
+            expected = props[key].get("type")
+            if expected and not _TYPE_CHECKS[expected](value):
+                return f"« {key} » doit être de type {expected}"
+            allowed = props[key].get("enum")
+            if allowed and value not in allowed:
+                return f"« {key} » doit valoir l'un de : {', '.join(map(str, allowed))}"
+        return None
 
     def run(self, ctx: ToolContext, args: dict[str, Any]) -> ToolOutput:
         if self.takes_context:

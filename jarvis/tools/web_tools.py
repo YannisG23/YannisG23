@@ -31,13 +31,20 @@ def get_weather(ctx: ToolContext, city: str = "", days: int = 3) -> str:
     city = city or ctx.config.city
     if not city:
         return "Je ne connais pas ta ville : précise-la, ou règle JARVIS_CITY."
+    found = fetch_weather(city, ctx.config.language, days)
+    if found is None:
+        return f"Ville introuvable : {city}"
+    return format_weather(*found)
+
+
+def fetch_weather(city: str, language: str = "fr", days: int = 3) -> tuple[str, dict] | None:
     geo = requests.get(
         "https://geocoding-api.open-meteo.com/v1/search",
-        params={"name": city, "count": 1, "language": ctx.config.language},
+        params={"name": city, "count": 1, "language": language},
         timeout=10,
     ).json()
     if not geo.get("results"):
-        return f"Ville introuvable : {city}"
+        return None
     place = geo["results"][0]
     forecast = requests.get(
         "https://api.open-meteo.com/v1/forecast",
@@ -51,7 +58,7 @@ def get_weather(ctx: ToolContext, city: str = "", days: int = 3) -> str:
         },
         timeout=10,
     ).json()
-    return format_weather(f"{place['name']}, {place.get('country', '')}", forecast)
+    return f"{place['name']}, {place.get('country', '')}", forecast
 
 
 def format_weather(place: str, data: dict) -> str:

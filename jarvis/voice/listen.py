@@ -35,6 +35,7 @@ class Listener:
             blocksize=FRAME,
             callback=lambda data, *_: self._frames.put(data[:, 0].copy()),
         )
+        self.level = 0.0  # niveau sonore du micro, pour l'animation du centre de commande
         self._stream.start()
         self.noise_floor = self._calibrate()
 
@@ -76,16 +77,27 @@ class Listener:
                 levels.append(_rms(frame))
         return float(np.median(levels)) if levels else 200.0
 
-    def wait_for_wake_word(self) -> None:
-        self.flush()
-        while True:
-            frame = self._next_frame()
+    def wait_for_wake_word(self, timeout: float | None = None) -> bool:
+        """Renvoie True si « Hey Jarvis » est entendu avant la fin du délai."""
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while deadline is None or time.monotonic() < deadline:
+            frame = self._next_frame(timeout=0.2)
             if frame is None:
                 continue
+            self.level = _rms(frame)
             scores = self.wake.predict(frame)
             if max(scores.values(), default=0.0) >= self.wake_threshold:
                 self.flush()
+                return True
+        return False
+
+    def drain(self) -> None:
+        """Consomme l'audio en attente sans l'analyser (quand Jarvis parle ou réfléchit)."""
+        while True:
+            frame = self._next_frame(timeout=0.05)
+            if frame is None:
                 return
+            self.level = _rms(frame)
 
     def record_utterance(self, start_timeout: float = 6.0, max_seconds: float = 20.0,
                          end_silence: float = 0.9) -> np.ndarray | None:
@@ -100,7 +112,8 @@ class Listener:
             frame = self._next_frame()
             if frame is None:
                 continue
-            loud = _rms(frame) > threshold
+            self.level = _rms(frame)
+            loud = self.level > threshold
             if not started:
                 waited += frame_seconds
                 frames = (frames + [frame])[-4:]  # garde un peu d'audio avant le début

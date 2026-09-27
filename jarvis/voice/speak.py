@@ -1,10 +1,23 @@
-"""Synthèse vocale : voix neuronale Microsoft Edge (gratuite, en ligne), repli hors ligne pyttsx3."""
+"""Synthèse vocale naturelle (voix neuronales Microsoft Edge), avec repli hors ligne.
+
+Les phrases sont mises en file : pendant qu'une phrase est jouée, la suivante est déjà
+synthétisée, ce qui donne une élocution fluide dès le premier mot de la réponse.
+"""
 
 from __future__ import annotations
 
 import asyncio
+import queue
 import re
+import tempfile
 import threading
+import wave
+from pathlib import Path
+from typing import Callable
+
+import numpy as np
+
+SAMPLE_RATE = 24000
 
 
 def clean_for_speech(text: str) -> str:
@@ -18,28 +31,91 @@ def clean_for_speech(text: str) -> str:
 
 
 class Speaker:
-    def __init__(self, voice: str, rate: str = "+0%") -> None:
+    def __init__(self, voice: str, rate: str = "+0%",
+                 on_state: Callable[[bool], None] | None = None) -> None:
         self.voice = voice
         self.rate = rate
+        self.on_state = on_state or (lambda speaking: None)
+        self._texts: queue.Queue[tuple[int, str]] = queue.Queue()
+        self._audio: queue.Queue[tuple[int, np.ndarray]] = queue.Queue()
+        self._generation = 0  # incrémenté par stop() pour jeter ce qui est en attente
+        self._pending = 0
         self._lock = threading.Lock()
+        self._idle = threading.Event()
+        self._idle.set()
         self._offline = None
+        threading.Thread(target=self._synth_loop, daemon=True, name="tts-synth").start()
+        threading.Thread(target=self._play_loop, daemon=True, name="tts-play").start()
+
+    @property
+    def speaking(self) -> bool:
+        return not self._idle.is_set()
 
     def say(self, text: str) -> None:
+        """Ajoute une phrase à dire (non bloquant)."""
         text = clean_for_speech(text)
         if not text:
             return
         with self._lock:
-            try:
-                self._say_edge(text)
-            except Exception:
-                # Pas d'internet ou service indisponible : voix hors ligne.
-                self._say_offline(text)
+            self._pending += 1
+            if self._idle.is_set():
+                self._idle.clear()
+                self.on_state(True)
+            self._texts.put((self._generation, text))
 
-    def _say_edge(self, text: str) -> None:
+    def wait(self, timeout: float | None = None) -> bool:
+        return self._idle.wait(timeout)
+
+    def stop(self) -> None:
+        """Coupe la parole immédiatement."""
+        import sounddevice as sd
+
+        with self._lock:
+            self._generation += 1
+        sd.stop()
+
+    def _done_one(self) -> None:
+        with self._lock:
+            self._pending -= 1
+            if self._pending <= 0:
+                self._pending = 0
+                self._idle.set()
+                self.on_state(False)
+
+    def _synth_loop(self) -> None:
+        while True:
+            generation, text = self._texts.get()
+            audio = None
+            if generation == self._generation:
+                try:
+                    audio = self._synth_edge(text)
+                except Exception:
+                    try:
+                        audio = self._synth_offline(text)
+                    except Exception:
+                        audio = None
+            if audio is None:
+                self._done_one()
+            else:
+                self._audio.put((generation, audio))
+
+    def _play_loop(self) -> None:
+        import sounddevice as sd
+
+        while True:
+            generation, audio = self._audio.get()
+            try:
+                if generation == self._generation:
+                    sd.play(audio, samplerate=SAMPLE_RATE)
+                    sd.wait()
+            except Exception:
+                pass
+            finally:
+                self._done_one()
+
+    def _synth_edge(self, text: str) -> np.ndarray:
         import edge_tts
         import miniaudio
-        import numpy as np
-        import sounddevice as sd
 
         async def synthesize() -> bytes:
             audio = bytearray()
@@ -51,23 +127,40 @@ class Speaker:
 
         mp3 = asyncio.run(synthesize())
         decoded = miniaudio.decode(
-            mp3, output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1, sample_rate=24000
+            mp3, output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1, sample_rate=SAMPLE_RATE
         )
-        samples = np.array(decoded.samples, dtype=np.int16)
-        sd.play(samples, samplerate=24000)
-        sd.wait()
+        return np.array(decoded.samples, dtype=np.int16)
 
-    def _say_offline(self, text: str) -> None:
+    def _synth_offline(self, text: str) -> np.ndarray:
+        """Voix du système (hors ligne), rendue dans un fichier WAV puis rééchantillonnée."""
         import pyttsx3
 
         if self._offline is None:
             self._offline = pyttsx3.init()
-        self._offline.say(text)
+        path = Path(tempfile.gettempdir()) / "jarvis_tts.wav"
+        self._offline.save_to_file(text, str(path))
         self._offline.runAndWait()
+        with wave.open(str(path)) as wav:
+            rate, channels = wav.getframerate(), wav.getnchannels()
+            samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype=np.int16)
+        if channels > 1:
+            samples = samples.reshape(-1, channels).mean(axis=1).astype(np.int16)
+        if rate != SAMPLE_RATE and samples.size:
+            positions = np.linspace(0, samples.size - 1, int(samples.size * SAMPLE_RATE / rate))
+            samples = np.interp(positions, np.arange(samples.size), samples).astype(np.int16)
+        return samples
 
 
 class SilentSpeaker:
-    """Utilisé en mode texte : n'émet aucun son."""
+    """Utilisé sans audio (mode texte) : même interface, aucun son."""
 
-    def say(self, text: str) -> None:  # noqa: D401
+    speaking = False
+
+    def say(self, text: str) -> None:
+        pass
+
+    def wait(self, timeout: float | None = None) -> bool:
+        return True
+
+    def stop(self) -> None:
         pass

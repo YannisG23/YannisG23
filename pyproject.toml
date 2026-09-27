@@ -16,11 +16,11 @@ dependencies = [
     "pyautogui>=0.9.54",
     "pyperclip>=1.8",
     "Pillow>=10",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]
 voice = [
-    "numpy>=1.24",
     "sounddevice>=0.4.6",
     "faster-whisper>=1.0",
     "openwakeword>=0.6",
@@ -40,3 +40,6 @@ jarvis = "jarvis.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["jarvis*"]
+
+[tool.setuptools.package-data]
+"jarvis.dashboard" = ["static/*"]

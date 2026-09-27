@@ -106,23 +106,67 @@ def media_control(action: str, times: int = 1) -> str:
     return f"Action média effectuée : {action} ×{times}"
 
 
-@registry.tool("Donne l'état de l'ordinateur : processeur, mémoire, disque, batterie, système.")
-def system_status() -> str:
+def system_snapshot(cpu_interval: float | None = None) -> dict:
+    """État de la machine sous forme structurée (utilisé aussi par le centre de commande)."""
     import psutil
 
-    lines = [
-        f"Système : {platform.system()} {platform.release()} ({platform.machine()})",
-        f"Processeur : {psutil.cpu_percent(interval=0.5):.0f}% utilisé, {psutil.cpu_count()} cœurs",
-    ]
     mem = psutil.virtual_memory()
-    lines.append(f"Mémoire : {mem.percent:.0f}% utilisée ({mem.used / 2**30:.1f} / {mem.total / 2**30:.1f} Go)")
     disk = psutil.disk_usage(Path.home().anchor or "/")
-    lines.append(f"Disque : {disk.percent:.0f}% utilisé ({disk.free / 2**30:.0f} Go libres)")
     battery = psutil.sensors_battery() if hasattr(psutil, "sensors_battery") else None
-    if battery:
-        state = "en charge" if battery.power_plugged else "sur batterie"
-        lines.append(f"Batterie : {battery.percent:.0f}% ({state})")
+    return {
+        "os": f"{platform.system()} {platform.release()}",
+        "cpu": psutil.cpu_percent(interval=cpu_interval),
+        "cores": psutil.cpu_count(),
+        "ram": mem.percent,
+        "ram_used_gb": round(mem.used / 2**30, 1),
+        "ram_total_gb": round(mem.total / 2**30, 1),
+        "disk": disk.percent,
+        "disk_free_gb": round(disk.free / 2**30),
+        "battery": round(battery.percent) if battery else None,
+        "plugged": bool(battery.power_plugged) if battery else None,
+        "uptime_h": round((datetime.now().timestamp() - psutil.boot_time()) / 3600, 1),
+    }
+
+
+@registry.tool("Donne l'état de l'ordinateur : processeur, mémoire, disque, batterie, système.")
+def system_status() -> str:
+    s = system_snapshot(cpu_interval=0.5)
+    lines = [
+        f"Système : {s['os']}, allumé depuis {s['uptime_h']} h",
+        f"Processeur : {s['cpu']:.0f}% utilisé, {s['cores']} cœurs",
+        f"Mémoire : {s['ram']:.0f}% utilisée ({s['ram_used_gb']} / {s['ram_total_gb']} Go)",
+        f"Disque : {s['disk']:.0f}% utilisé ({s['disk_free_gb']} Go libres)",
+    ]
+    if s["battery"] is not None:
+        lines.append(f"Batterie : {s['battery']}% ({'en charge' if s['plugged'] else 'sur batterie'})")
     return "\n".join(lines)
+
+
+@registry.tool(
+    "Liste les programmes qui consomment le plus de processeur ou de mémoire.",
+    properties={"sort_by": {"type": "string", "enum": ["cpu", "memory"]}},
+)
+def list_processes(sort_by: str = "memory") -> str:
+    import time
+
+    import psutil
+
+    procs = list(psutil.process_iter(["name", "memory_info"]))
+    for p in procs:
+        try:
+            p.cpu_percent(None)
+        except psutil.Error:
+            pass
+    time.sleep(0.5)
+    rows = []
+    for p in procs:
+        try:
+            rows.append((p.info["name"] or "?", p.pid, p.cpu_percent(None), p.info["memory_info"].rss / 2**20))
+        except (psutil.Error, AttributeError):
+            continue
+    rows.sort(key=lambda r: -(r[2] if sort_by == "cpu" else r[3]))
+    return "\n".join(f"{name} (pid {pid}) : processeur {cpu:.0f}%, mémoire {mb:.0f} Mo"
+                     for name, pid, cpu, mb in rows[:15])
 
 
 @registry.tool(
@@ -193,6 +237,13 @@ def set_timer(ctx: ToolContext, seconds: int, label: str) -> str:
     due = datetime.now() + timedelta(seconds=seconds)
     _timers[timer_id] = (timer, label, due)
     return f"Minuteur #{timer_id} réglé pour {due:%H:%M:%S} : {label}"
+
+
+def active_timers() -> list[dict]:
+    return [
+        {"id": i, "label": label, "due": due.isoformat(timespec="seconds")}
+        for i, (_, label, due) in sorted(_timers.items())
+    ]
 
 
 @registry.tool("Liste les minuteurs et rappels en cours.")

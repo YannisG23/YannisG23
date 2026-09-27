@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import html
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from email.message import EmailMessage
 from typing import Any
 
@@ -90,6 +90,38 @@ def extract_body(payload: dict) -> str:
     return re.sub(r"\n\s*\n+", "\n\n", text).strip()
 
 
+def is_connected(config: Any) -> bool:
+    return config.google_token.exists()
+
+
+def list_emails(ctx: ToolContext, query: str = "is:unread in:inbox", max_results: int = 10) -> list[dict]:
+    gmail = _service(ctx, "gmail", "v1")
+    listing = (
+        gmail.users()
+        .messages()
+        .list(userId="me", q=query, maxResults=max(1, min(int(max_results), 25)))
+        .execute()
+    )
+    emails = []
+    for ref in listing.get("messages", []):
+        msg = (
+            gmail.users()
+            .messages()
+            .get(userId="me", id=ref["id"], format="metadata", metadataHeaders=["From", "Subject", "Date"])
+            .execute()
+        )
+        headers = msg["payload"]["headers"]
+        emails.append({
+            "id": ref["id"],
+            "date": _header(headers, "Date"),
+            "from": _header(headers, "From"),
+            "subject": _header(headers, "Subject"),
+            "snippet": html.unescape(msg.get("snippet", "")),
+            "unread": "UNREAD" in msg.get("labelIds", []),
+        })
+    return emails
+
+
 @registry.tool(
     "Liste des e-mails Gmail. Par défaut les non lus de la boîte de réception. Accepte la "
     "syntaxe de recherche Gmail (ex. 'from:amazon', 'is:unread newer_than:2d', 'subject:facture').",
@@ -99,30 +131,13 @@ def extract_body(payload: dict) -> str:
     },
 )
 def gmail_list(ctx: ToolContext, query: str = "is:unread in:inbox", max_results: int = 10) -> str:
-    gmail = _service(ctx, "gmail", "v1")
-    listing = (
-        gmail.users()
-        .messages()
-        .list(userId="me", q=query, maxResults=max(1, min(int(max_results), 25)))
-        .execute()
-    )
-    ids = [m["id"] for m in listing.get("messages", [])]
-    if not ids:
+    emails = list_emails(ctx, query, max_results)
+    if not emails:
         return f"Aucun e-mail pour « {query} »."
-    lines = []
-    for msg_id in ids:
-        msg = (
-            gmail.users()
-            .messages()
-            .get(userId="me", id=msg_id, format="metadata", metadataHeaders=["From", "Subject", "Date"])
-            .execute()
-        )
-        headers = msg["payload"]["headers"]
-        lines.append(
-            f"id={msg_id} | {_header(headers, 'Date')} | De : {_header(headers, 'From')} | "
-            f"Objet : {_header(headers, 'Subject')} | Aperçu : {html.unescape(msg.get('snippet', ''))}"
-        )
-    return "\n".join(lines)
+    return "\n".join(
+        f"id={e['id']} | {e['date']} | De : {e['from']} | Objet : {e['subject']} | Aperçu : {e['snippet']}"
+        for e in emails
+    )
 
 
 @registry.tool(
@@ -193,16 +208,9 @@ def _event_time(value: dict) -> str:
     return value.get("dateTime") or value.get("date", "")
 
 
-@registry.tool(
-    "Liste les événements de l'agenda Google sur une période.",
-    properties={
-        "days": {"type": "integer", "description": "Nombre de jours à partir d'aujourd'hui. Défaut 7."},
-        "query": {"type": "string", "description": "Filtre texte optionnel."},
-    },
-)
-def calendar_list(ctx: ToolContext, days: int = 7, query: str = "") -> str:
+def list_events(ctx: ToolContext, days: int = 7, query: str = "") -> list[dict]:
     cal = _service(ctx, "calendar", "v3")
-    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
     params: dict[str, Any] = {
         "calendarId": "primary",
         "timeMin": start.isoformat(),
@@ -213,16 +221,35 @@ def calendar_list(ctx: ToolContext, days: int = 7, query: str = "") -> str:
     }
     if query:
         params["q"] = query
-    events = cal.events().list(**params).execute().get("items", [])
+    return [
+        {
+            "id": ev["id"],
+            "title": ev.get("summary", "(sans titre)"),
+            "start": _event_time(ev["start"]),
+            "end": _event_time(ev["end"]),
+            "all_day": "date" in ev["start"],
+            "location": ev.get("location", ""),
+        }
+        for ev in cal.events().list(**params).execute().get("items", [])
+    ]
+
+
+@registry.tool(
+    "Liste les événements de l'agenda Google sur une période.",
+    properties={
+        "days": {"type": "integer", "description": "Nombre de jours à partir d'aujourd'hui. Défaut 7."},
+        "query": {"type": "string", "description": "Filtre texte optionnel."},
+    },
+)
+def calendar_list(ctx: ToolContext, days: int = 7, query: str = "") -> str:
+    events = list_events(ctx, days, query)
     if not events:
         return "Aucun événement sur cette période."
-    lines = []
-    for ev in events:
-        line = f"id={ev['id']} | {_event_time(ev['start'])} → {_event_time(ev['end'])} | {ev.get('summary', '(sans titre)')}"
-        if ev.get("location"):
-            line += f" | Lieu : {ev['location']}"
-        lines.append(line)
-    return "\n".join(lines)
+    return "\n".join(
+        f"id={ev['id']} | {ev['start']} → {ev['end']} | {ev['title']}"
+        + (f" | Lieu : {ev['location']}" if ev["location"] else "")
+        for ev in events
+    )
 
 
 @registry.tool(
