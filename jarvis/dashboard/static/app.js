@@ -86,9 +86,10 @@ function setState(state) {
 }
 
 function renderInfo() {
-  $("k-model").textContent = info.model || "–";
+  $("k-model").textContent = info.model ? `${info.model} · ${info.brain}` : "–";
   $("k-effort").textContent = info.effort || "–";
-  $("k-voice").textContent = info.voice_enabled ? (info.voice || "–").replace(/Neural$/, "") : "désactivée";
+  $("k-voice").textContent = !info.voice_enabled ? "désactivée"
+    : info.tts === "ElevenLabs" ? "ElevenLabs" : (info.voice || "–").replace(/Neural$/, "");
   const s = info.stats || {};
   $("k-memory").textContent = `${s.facts ?? 0} faits · ${s.episodes ?? 0} conversations`;
   $("btn-mic").disabled = !info.voice_enabled;
@@ -198,6 +199,10 @@ function handleEvent(ev, replay = false) {
       break;
     case "stopped":
       addActivity("Parole interrompue");
+      break;
+    case "barge_in":
+      $("hint").textContent = "Je t'écoute…";
+      addActivity("Interrompu à la voix");
       break;
   }
 }

@@ -77,6 +77,33 @@ def _api(config: Config) -> Callable[[], str]:
     return test
 
 
+def _subscription() -> str:
+    from .brain_subscription import auth_status
+
+    status = auth_status()
+    if not status.get("loggedIn"):
+        raise RuntimeError("compte Claude non connecté")
+    method = status.get("authMethod", "")
+    if "api" in str(method).lower():
+        raise RuntimeError(f"connecté avec une clé API ({method}) et non avec ton abonnement")
+    return "compte Claude connecté (abonnement)"
+
+
+def _elevenlabs(config: Config) -> str:
+    import requests
+
+    if not config.elevenlabs_api_key:
+        raise RuntimeError("ELEVENLABS_API_KEY est vide")
+    response = requests.get("https://api.elevenlabs.io/v1/user/subscription",
+                            headers={"xi-api-key": config.elevenlabs_api_key}, timeout=15)
+    if response.status_code == 401:
+        raise RuntimeError("clé refusée")
+    response.raise_for_status()
+    data = response.json()
+    used, limit = data.get("character_count", 0), data.get("character_limit", 0)
+    return f"offre {data.get('tier', '?')}, {max(0, limit - used)} caractères restants ce mois-ci"
+
+
 def _microphone() -> str:
     import numpy as np
     import sounddevice as sd
@@ -94,14 +121,15 @@ def _microphone() -> str:
 def _voice(config: Config) -> str:
     from .voice.speak import Speaker
 
-    speaker = Speaker(config.tts_voice, config.tts_rate)
+    speaker = Speaker.from_config(config)
     speaker.say(f"Bonjour {config.user_name}. Ceci est un test de ma voix.")
     time.sleep(0.3)
     if not speaker.wait(timeout=30):
         raise RuntimeError("la lecture ne se termine pas")
     import sounddevice as sd
 
-    return f"voix {config.tts_voice} sur « {sd.query_devices(kind='output')['name']} » (tu as dû l'entendre)"
+    voice = "ElevenLabs" if speaker.elevenlabs else config.tts_voice
+    return f"voix {voice} sur « {sd.query_devices(kind='output')['name']} » (tu as dû l'entendre)"
 
 
 def _edge_voice(config: Config) -> str:
@@ -158,11 +186,16 @@ def run_doctor(config: Config) -> int:
     console.rule("[bold bright_blue]Diagnostic J.A.R.V.I.S.")
     check = Check()
     check.run("Python", _python, "Installe Python 3.11 ou 3.12 depuis python.org.")
-    check.run("Bibliothèques de base", _imports(["anthropic", "rich", "requests", "psutil", "numpy", "dotenv"]),
+    check.run("Bibliothèques de base", _imports(["anthropic", "claude_agent_sdk", "rich", "requests", "psutil", "numpy", "dotenv"]),
               'pip install -e ".[all]"')
-    api_ok = check.run("Clé API Anthropic", _api(config),
-                       "Mets ANTHROPIC_API_KEY=sk-ant-... dans le fichier .env (console.anthropic.com → API keys). "
-                       "Si la clé est bonne, vérifie JARVIS_MODEL et le crédit du compte.")
+    if config.uses_subscription:
+        brain_ok = check.run("Cerveau : abonnement Claude", _subscription,
+                             "Lance « python -m jarvis --login » et connecte-toi avec ton compte Claude (Pro ou Max). "
+                             "Pour utiliser une clé API à la place : JARVIS_BRAIN=api dans .env.")
+    else:
+        brain_ok = check.run("Cerveau : clé API Anthropic", _api(config),
+                             "Mets ANTHROPIC_API_KEY=sk-ant-... dans le fichier .env (console.anthropic.com → API keys). "
+                             "Si la clé est bonne, vérifie JARVIS_MODEL et le crédit du compte.")
     check.run("Mémoire", lambda: _memory(config))
     check.run("Centre de commande", lambda: _port(config),
               "Un autre Jarvis tourne déjà ? Sinon change JARVIS_DASHBOARD_PORT.")
@@ -175,6 +208,10 @@ def run_doctor(config: Config) -> int:
         check.run("Voix neuronale (internet)", lambda: _edge_voice(config),
                   "Pas d'accès à la voix en ligne : Jarvis utilisera la voix du système (pyttsx3).",
                   optional=True)
+        if config.tts_engine == "elevenlabs":
+            check.run("Voix ElevenLabs", lambda: _elevenlabs(config),
+                      "Vérifie ELEVENLABS_API_KEY (elevenlabs.io → Profile → API keys). "
+                      "Sans elle, Jarvis utilise la voix gratuite.", optional=True)
         check.run("Haut-parleurs", lambda: _voice(config),
                   "Vérifie la sortie audio par défaut de ton système.")
         check.run("Micro", _microphone,
@@ -196,6 +233,6 @@ def run_doctor(config: Config) -> int:
         console.print(f"[green]Prêt ![/] ({check.warnings} option(s) non disponible(s)). Lance : python -m jarvis")
     else:
         console.print("[green]Tout est prêt.[/] Lance : python -m jarvis")
-    if not api_ok:
-        console.print("[dim]Sans clé API valide, Jarvis ne peut pas réfléchir.[/]")
+    if not brain_ok:
+        console.print("[dim]Sans cerveau connecté, Jarvis ne peut pas réfléchir.[/]")
     return 1 if check.failures else 0

@@ -2,13 +2,13 @@
 
 Un Jarvis de bureau façon Iron Man : tu dis « **Hey Jarvis** », tu parles, il te répond avec une voix naturelle et agit sur ton ordinateur, tes e-mails, ton agenda et tes tâches. Il se souvient de toi d'une conversation à l'autre, et tout se pilote depuis un **centre de commande** dans ton navigateur.
 
-Son cerveau est **Claude** (API Anthropic). L'écoute, la voix, la mémoire et le centre de commande tournent sur ton PC.
+Son cerveau est **Claude**, branché sur **ton abonnement Claude** (Pro ou Max) via Claude Code : pas de facture à l'usage. L'écoute, la voix, la mémoire et le centre de commande tournent sur ton PC.
 
 ## Ce qu'il sait faire
 
 | Domaine | Exemples |
 |---|---|
-| Conversation vocale | « Hey Jarvis », puis mode conversation (tu enchaînes sans le redire). Il commence à parler dès la première phrase de sa réponse, et tu peux l'interrompre (Échap ou bouton ■). |
+| Conversation vocale | « Hey Jarvis », puis mode conversation (tu enchaînes sans le redire). Il commence à parler dès la première phrase de sa réponse, et tu peux lui couper la parole en disant « Hey Jarvis » (ou Échap, ou le bouton ■). |
 | Centre de commande | Réacteur animé (veille, écoute, réflexion, parole), conversation en direct, état du PC, météo, agenda, e-mails, mémoire modifiable, tâches, minuteurs, journal des actions, boutons « Briefing » et « Nouvelle conversation ». |
 | Mémoire | Il retient seul ce qui compte (goûts, proches, projets, habitudes), retrouve les souvenirs utiles à chaque message et résume chaque conversation. Tu peux lui demander « de quoi on a parlé mardi ? ». |
 | Briefing | « Fais-moi le point » : date, météo, agenda du jour, e-mails importants, tâches. |
@@ -24,11 +24,11 @@ Son cerveau est **Claude** (API Anthropic). L'écoute, la voix, la mémoire et l
 
 ## Installation
 
-Il te faut **Python 3.10 à 3.12** (Windows, macOS ou Linux), un micro et des haut-parleurs, ainsi qu'une clé d'API Anthropic : https://console.anthropic.com/settings/keys (usage payant à la consommation).
+Il te faut **Python 3.10 à 3.12** (Windows, macOS ou Linux), un micro, des haut-parleurs et un **compte Claude Pro ou Max**. Claude Code est installé automatiquement avec Jarvis.
 
 ### En un clic
 
-- **Windows** : double-clique sur `install.bat`. Il installe tout, ouvre le fichier `.env` pour que tu y colles ta clé, ton prénom et ta ville, puis lance le diagnostic. Ensuite, lance Jarvis avec `jarvis.bat`.
+- **Windows** : double-clique sur `install.bat`. Il installe tout, ouvre le fichier `.env` pour ton prénom et ta ville, te fait connecter ton compte Claude dans le navigateur, puis lance le diagnostic. Ensuite, lance Jarvis avec `jarvis.bat`.
 - **macOS / Linux** : `./install.sh`, remplis `.env`, puis `./jarvis.sh`.
 
 ### À la main
@@ -37,13 +37,14 @@ Il te faut **Python 3.10 à 3.12** (Windows, macOS ou Linux), un micro et des ha
 python -m venv .venv
 # Windows : .venv\Scripts\activate    macOS/Linux : source .venv/bin/activate
 pip install -e ".[all]"
-cp .env.example .env        # puis remplis ta clé, ton prénom, ta ville
+cp .env.example .env        # puis remplis ton prénom et ta ville
+python -m jarvis --login    # connecte ton compte Claude (une seule fois)
 ```
 
 ### Utilisation
 
 ```bash
-python -m jarvis --doctor   # vérifie tout : clé, micro, haut-parleurs, voix, Whisper, Google
+python -m jarvis --doctor   # vérifie tout : compte Claude, micro, haut-parleurs, voix, Whisper, Google
 python -m jarvis            # voix + centre de commande (s'ouvre dans le navigateur)
 python -m jarvis --text     # sans micro ni voix : clavier + centre de commande
 python -m jarvis --memory   # voir ce que Jarvis a retenu de toi
@@ -74,6 +75,7 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 
 | Variable | Rôle | Défaut |
 |---|---|---|
+| `JARVIS_BRAIN` | `abonnement` (compte Claude, prix fixe) ou `api` (clé API, facturée à l'usage) | `abonnement` |
 | `JARVIS_MODEL` | Modèle Claude | `claude-opus-5` |
 | `JARVIS_EFFORT` | Profondeur de réflexion : `low` (plus rapide), `medium`, `high` | `medium` |
 | `JARVIS_VOICE` | Voix (`edge-tts --list-voices`) | `fr-FR-RemyMultilingualNeural` |
@@ -86,8 +88,21 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 | `JARVIS_EVENT_REMINDER_MINUTES` | Avance des rappels de rendez-vous (0 = désactivé) | `10` |
 | `JARVIS_DASHBOARD_PORT` | Port du centre de commande | `8765` |
 
+| `JARVIS_TTS` | Voix : `edge` (gratuite) ou `elevenlabs` (premium) | `edge` |
+| `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID` | Clé et voix ElevenLabs | voix « Daniel » |
+| `JARVIS_BARGE_IN` | Couper la parole en disant « Hey Jarvis » | `1` |
+
 Autres voix naturelles en français : `fr-FR-VivienneMultilingualNeural`, `fr-FR-HenriNeural`, `fr-FR-DeniseNeural`, `fr-CA-ThierryNeural`.
 Pour des réponses plus rapides : `JARVIS_EFFORT=low`. Avec une carte graphique NVIDIA, Whisper l'utilise automatiquement, et `medium` ou `large-v3` deviennent confortables.
+
+## Combien ça coûte
+
+- **Cerveau** : ton abonnement Claude (Pro ou Max), à prix fixe. Les échanges avec Jarvis comptent dans les limites d'utilisation de ton abonnement, partagées avec ton usage normal de Claude. Si tu atteins la limite, Jarvis te le dit et te donne l'heure de réinitialisation. Pour dépenser moins de quota : `JARVIS_EFFORT=low`, ou `JARVIS_MODEL=claude-sonnet-5`.
+- **Voix** : gratuite par défaut (Edge). ElevenLabs est payant au-delà de son petit quota gratuit, et Jarvis repasse tout seul sur la voix gratuite quand le quota est épuisé.
+- **Mode API** (`JARVIS_BRAIN=api`) : facturé à l'usage par Anthropic, utile si tu n'as pas d'abonnement.
+- Tout le reste (écoute, mot d'activation, mémoire, centre de commande, météo) est gratuit et tourne sur ton PC.
+
+Ce mode abonnement est prévu pour **ton usage personnel**, sur ton PC et avec ton compte. Anthropic n'autorise pas à proposer une connexion avec un compte Claude dans un produit distribué à d'autres personnes : pour partager Jarvis, chacun utilise son propre compte, ou le mode API.
 
 ## Dépannage
 
@@ -96,6 +111,8 @@ Pour des réponses plus rapides : `JARVIS_EFFORT=low`. Avec une carte graphique 
 - **Linux** : il faut `portaudio` (`sudo apt install libportaudio2`). Pour le mot d'activation, `tflite-runtime` n'existe pas pour toutes les versions de Python : utilise Python 3.10 ou 3.11.
 - **macOS** : autorise, pour ton terminal, le micro, l'*Accessibilité* (touches média) et l'*Enregistrement de l'écran* (« regarde mon écran »).
 - **Port occupé** : change `JARVIS_DASHBOARD_PORT`.
+- **« Je n'arrive pas à joindre Claude »** : relance `python -m jarvis --login`, puis `python -m jarvis --doctor`.
+- **Il se coupe tout seul pendant qu'il parle** : il a cru entendre « Hey Jarvis » dans sa propre voix. Utilise un casque, ou mets `JARVIS_BARGE_IN=0`.
 
 ## Architecture
 
@@ -105,7 +122,8 @@ jarvis/
 ├── doctor.py            # diagnostic de l'installation
 ├── app.py               # lancement : noyau + voix + centre de commande + terminal
 ├── core.py              # noyau : file de requêtes, bus d'événements, confirmations, tâches de fond
-├── brain.py             # Claude en streaming : persona, outils, rappel de souvenirs, consolidation
+├── brain.py             # Claude via l'API : persona, outils, rappel de souvenirs, consolidation
+├── brain_subscription.py # Claude via Claude Code et ton abonnement (outils en serveur MCP)
 ├── memory.py            # mémoire SQLite : faits, conversations résumées, journal, tâches
 ├── config.py            # réglages (.env)
 ├── voice/

@@ -9,6 +9,7 @@ description = "J.A.R.V.I.S. — assistant personnel vocal propulsé par Claude"
 requires-python = ">=3.10"
 dependencies = [
     "anthropic>=1.8",
+    "claude-agent-sdk>=0.2.160",
     "python-dotenv>=1.0",
     "rich>=13",
     "requests>=2.31",

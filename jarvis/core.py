@@ -14,7 +14,7 @@ from typing import Any
 
 import anthropic
 
-from .brain import Brain, RefusalError
+from .brain import Brain, BrainError, Interrupted
 from .config import Config
 from .memory import Memory
 from .tools import registry
@@ -90,8 +90,14 @@ class Core:
         self.speaker = speaker or SilentSpeaker()
         if hasattr(self.speaker, "on_state"):
             self.speaker.on_state = self._on_speaking
-        self.brain = Brain(config, self.memory, registry, client=client, confirm=self.confirm,
-                           notify=self.notify, on_event=self.bus.publish)
+        if config.uses_subscription and client is None:
+            from .brain_subscription import SubscriptionBrain
+
+            self.brain: Brain = SubscriptionBrain(config, self.memory, registry, confirm=self.confirm,
+                                                  notify=self.notify, on_event=self.bus.publish)
+        else:
+            self.brain = Brain(config, self.memory, registry, client=client, confirm=self.confirm,
+                               notify=self.notify, on_event=self.bus.publish)
         self.voice = None  # VoiceLoop, branchée par l'application en mode vocal
         self.state = "idle"
         self.awaiting_follow_up = False
@@ -148,6 +154,9 @@ class Core:
         self.speaker.say(text)
 
     def stop_speaking(self) -> None:
+        """Coupe la parole et abandonne la réponse en cours."""
+        if self._busy:
+            self.brain.interrupt()
         self.speaker.stop()
         self.bus.publish("stopped")
 
@@ -195,7 +204,9 @@ class Core:
                 on_sentence=self.say,
                 on_delta=lambda delta: self.bus.publish("assistant_delta", {"turn": turn, "text": delta}),
             )
-        except RefusalError as exc:
+        except Interrupted:
+            reply = "(interrompu)"
+        except BrainError as exc:
             reply = str(exc)
             self.say(reply)
         except anthropic.AuthenticationError:
@@ -301,4 +312,5 @@ class Core:
                 self.brain.consolidate()
             except Exception:
                 pass
+        self.brain.close()
         self.memory.close()

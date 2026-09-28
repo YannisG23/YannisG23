@@ -30,11 +30,11 @@ pip install -e ".[all]"
 if [ ! -f .env ]; then
   cp .env.example .env
   echo
-  echo "Ouvre le fichier .env et remplis ta clé API Anthropic, ton prénom et ta ville."
-  echo "Ensuite relance : ./jarvis.sh --doctor"
+  echo "Ouvre le fichier .env et remplis ton prénom et ta ville, puis relance ./install.sh"
   exit 0
 fi
 
+python -m jarvis --login || true
 python -m jarvis --doctor || true
 echo
 echo "Installation terminée. Lance Jarvis avec : ./jarvis.sh"

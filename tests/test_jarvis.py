@@ -433,3 +433,162 @@ def test_first_launch_today_and_greeting(config):
     assert _greeting(config, morning).startswith("Bonjour Yannis")
     assert _greeting(config, morning.replace(hour=20)).startswith("Bonsoir")
     assert "debout" in _greeting(config, morning.replace(hour=2))
+
+
+# ---------------------------------------------------------------- cerveau abonnement (Claude Code)
+
+import asyncio
+
+import claude_agent_sdk as real_sdk
+
+
+def _stream_text(text):
+    events = [{"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}]
+    events += [{"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": text[i:i + 6]}}
+               for i in range(0, len(text), 6)]
+    events += [{"type": "content_block_stop", "index": 0}, {"type": "message_stop"}]
+    return [real_sdk.StreamEvent(uuid=f"u{i}", session_id="s", event=e) for i, e in enumerate(events)] + [
+        real_sdk.AssistantMessage(content=[real_sdk.TextBlock(text=text)], model="claude-opus-5")]
+
+
+def _result(is_error=False, **extra):
+    return real_sdk.ResultMessage(subtype="error" if is_error else "success", duration_ms=1, duration_api_ms=1,
+                                  is_error=is_error, num_turns=1, session_id="s",
+                                  usage={"input_tokens": 50, "cache_read_input_tokens": 4000, "output_tokens": 20},
+                                  **extra)
+
+
+class FakeSDK:
+    """claude_agent_sdk avec un faux ClaudeSDKClient : types, options et outils MCP restent les vrais."""
+
+    def __init__(self, *turns, summary=None):
+        self.turns = list(turns)
+        self.summary = summary
+        self.options = []
+        self.prompts = []
+        sdk = self
+
+        class Client:
+            def __init__(self, options):
+                sdk.options.append(options)
+
+            async def connect(self):
+                pass
+
+            async def query(self, prompt):
+                sdk.prompts.append(prompt)
+
+            async def receive_response(self):
+                for message in sdk.turns.pop(0):
+                    yield message
+
+            async def interrupt(self):
+                pass
+
+            async def disconnect(self):
+                pass
+
+        self.ClaudeSDKClient = Client
+
+    def __getattr__(self, name):
+        return getattr(real_sdk, name)
+
+    async def query(self, prompt, options):
+        self.prompts.append(prompt)
+        yield _result(structured_output=self.summary)
+
+
+@pytest.fixture
+def sub_brain(config, memory, monkeypatch):
+    from jarvis.brain_subscription import SubscriptionBrain
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-ne-doit-pas-servir")
+    made = []
+
+    def make(*turns, summary=None, **kwargs):
+        sdk = FakeSDK(*turns, summary=summary)
+        brain = SubscriptionBrain(config, memory, registry, sdk=sdk, **kwargs)
+        made.append(brain)
+        return brain, sdk
+
+    yield make
+    for brain in made:
+        brain.close()
+
+
+def test_subscription_brain_streams_and_uses_subscription(sub_brain, memory):
+    import os
+
+    memory.remember("Yannis joue de la guitare", "loisirs", importance=3)
+    brain, sdk = sub_brain([*_stream_text("Salut Yannis. Prêt à jouer ?"), _result()])
+    sentences, deltas = [], []
+    reply = brain.ask("Salut", on_sentence=sentences.append, on_delta=deltas.append)
+    assert reply == "Salut Yannis. Prêt à jouer ?"
+    assert sentences == ["Salut Yannis.", "Prêt à jouer ?"]
+    assert "".join(deltas) == reply
+    assert "ANTHROPIC_API_KEY" not in os.environ  # sinon Claude Code facturerait l'API
+    opts = sdk.options[0]
+    assert "JARVIS" in opts.system_prompt and "guitare" in opts.system_prompt
+    assert "mcp__jarvis__remember" in opts.allowed_tools and "WebSearch" in opts.allowed_tools
+    assert opts.tools == ["WebSearch", "WebFetch"] and opts.setting_sources == []
+    assert opts.include_partial_messages and opts.model == "claude-opus-5"
+    assert "] Salut" in sdk.prompts[0]
+    assert brain.turns == 1 and brain.context_tokens == 4070
+
+
+def test_subscription_tools_run_with_confirmation(sub_brain, memory):
+    asked = []
+    brain, _ = sub_brain(confirm=lambda action: asked.append(action) or False)
+    out = asyncio.run(brain._tool_handlers["remember"]({"fact": "Yannis aime les mangas"}))
+    assert "Mémorisé" in out["content"][0]["text"] and memory.search("mangas")
+    out = asyncio.run(brain._tool_handlers["run_command"]({"command": "echo hi"}))
+    assert "refusé" in out["content"][0]["text"] and asked
+
+
+def test_subscription_limit_is_explained(sub_brain):
+    from jarvis.brain import BrainError
+
+    info = real_sdk.RateLimitInfo(status="rejected")
+    brain, sdk = sub_brain([real_sdk.RateLimitEvent(rate_limit_info=info, uuid="r", session_id="s"),
+                            _result(is_error=True, result="limit reached")])
+    with pytest.raises(BrainError, match="limite"):
+        brain.ask("Salut")
+    assert sdk.turns == []  # la réponse a été lue jusqu'au bout
+
+
+def test_subscription_consolidation(sub_brain, memory):
+    summary = {"summary": "Yannis a parlé de son concert.", "facts": [
+        {"fact": "Yannis va à un concert de rap samedi", "category": "loisirs", "importance": 2}]}
+    brain, sdk = sub_brain([*_stream_text("Génial !"), _result()], summary=summary)
+    brain.ask("Je vais à un concert samedi")
+    brain.consolidate()
+    assert memory.recent_episodes()[0].summary == summary["summary"]
+    assert memory.search("concert")[0].content.startswith("Yannis va")
+    assert brain.turns == 0
+
+
+# ---------------------------------------------------------------- voix et interruption
+
+def test_elevenlabs_quota_falls_back_to_free_voice(monkeypatch):
+    from jarvis.voice import speak
+
+    def refuse(*args, **kwargs):
+        raise speak.ElevenLabsQuotaError("quota épuisé")
+
+    monkeypatch.setattr(speak, "synth_elevenlabs", refuse)
+    speaker = object.__new__(speak.Speaker)  # sans ouvrir la sortie audio
+    speaker.elevenlabs = {"api_key": "k", "voice_id": "v", "model": "m"}
+    warnings = []
+    speaker.on_warning = warnings.append
+    assert speaker._synth_premium("Bonjour") is None
+    assert speaker.elevenlabs is None and "quota épuisé" in warnings[0]
+
+
+def test_api_brain_interrupt_rolls_back(config, memory):
+    from jarvis.brain import Interrupted
+
+    client = FakeClient(response("end_turn", text("Une très longue réponse qui n'en finit pas.")))
+    brain = Brain(config, memory, registry, client=client)
+    with pytest.raises(Interrupted):
+        brain.ask("Raconte", on_delta=lambda d: brain.interrupt())
+    assert brain.messages == [] and brain.turns == 0

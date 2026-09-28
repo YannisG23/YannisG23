@@ -29,10 +29,12 @@ pip install -e ".[all]" || goto :error
 if not exist .env (
   copy .env.example .env >nul
   echo.
-  echo Le fichier .env va s'ouvrir : colle ta cle API Anthropic, ton prenom et ta ville, enregistre, puis ferme-le.
+  echo Le fichier .env va s'ouvrir : mets ton prenom et ta ville, enregistre, puis ferme-le.
   notepad .env
 )
 
+echo.
+python -m jarvis --login
 echo.
 python -m jarvis --doctor
 echo.

@@ -77,16 +77,18 @@ class Listener:
                 levels.append(_rms(frame))
         return float(np.median(levels)) if levels else 200.0
 
-    def wait_for_wake_word(self, timeout: float | None = None) -> bool:
+    def wait_for_wake_word(self, timeout: float | None = None, threshold: float | None = None,
+                           adapt: bool = True) -> bool:
         """Renvoie True si « Hey Jarvis » est entendu avant la fin du délai."""
+        threshold = self.wake_threshold if threshold is None else threshold
         deadline = None if timeout is None else time.monotonic() + timeout
         while deadline is None or time.monotonic() < deadline:
             frame = self._next_frame(timeout=0.2)
             if frame is None:
                 continue
-            self._observe(frame)
+            self._observe(frame, adapt=adapt)
             scores = self.wake.predict(frame)
-            if max(scores.values(), default=0.0) >= self.wake_threshold:
+            if max(scores.values(), default=0.0) >= threshold:
                 self.flush()
                 return True
         return False

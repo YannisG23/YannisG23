@@ -99,10 +99,19 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
         try:
             from .voice.speak import Speaker
 
-            speaker = Speaker(config.tts_voice, config.tts_rate)
+            if config.tts_engine == "elevenlabs" and not config.elevenlabs_api_key:
+                console.print("[yellow]JARVIS_TTS=elevenlabs mais ELEVENLABS_API_KEY est vide : voix gratuite.[/]")
+            speaker = Speaker.from_config(config)
         except Exception as exc:
             console.print(f"[red]Synthèse vocale indisponible : {escape(str(exc))}[/]")
-    core = Core(config, speaker=speaker)
+    try:
+        core = Core(config, speaker=speaker)
+    except ImportError:
+        console.print("[red]Le mode abonnement nécessite claude-agent-sdk : relance install.bat "
+                      "(ou pip install -e \".[all]\").[/]")
+        return
+    if speaker is not None:
+        speaker.on_warning = lambda message: core.bus.publish("error", {"message": message})
     listener = _start_voice(config, core) if voice else None
 
     pending: dict = {}

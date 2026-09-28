@@ -124,8 +124,16 @@ class SentenceSplitter:
         return rest
 
 
-class RefusalError(RuntimeError):
+class BrainError(RuntimeError):
+    """Erreur dont le message peut être dit tel quel à l'utilisateur."""
+
+
+class RefusalError(BrainError):
     pass
+
+
+class Interrupted(BrainError):
+    """L'utilisateur a coupé la parole à Jarvis : le tour est abandonné sans rien dire."""
 
 
 class Brain:
@@ -149,6 +157,7 @@ class Brain:
         self.tools = self._build_tools()
         self.messages: list[dict[str, Any]] = []
         self.context_tokens = 0
+        self._cancel = False
         self._new_session()
 
     # ------------------------------------------------------------------ session
@@ -228,6 +237,7 @@ class Brain:
         complète (synthèse vocale immédiate).
         """
         start = len(self.messages)
+        self._cancel = False
         content = f"[{spoken_timestamp(datetime.now())}] {text}{self._recall_block(text)}"
         self.messages.append({"role": "user", "content": content})
         try:
@@ -272,6 +282,8 @@ class Brain:
             chunks: list[str] = []
 
             def handle_delta(delta: str) -> None:
+                if self._cancel:
+                    raise Interrupted("Interrompu.")
                 chunks.append(delta)
                 if on_delta:
                     on_delta(delta)
@@ -371,16 +383,14 @@ class Brain:
         self._new_session()
         return episode
 
+    def _consolidation_prompt(self, transcript: str, known: str) -> str:
+        return CONSOLIDATION_PROMPT.format(user=self.config.user_name, known=known, transcript=transcript)
+
     def _summarize(self, transcript: str, known: str) -> dict | None:
         response = self.client.beta.messages.create(
             model=self.config.model,
             max_tokens=8000,
-            messages=[{
-                "role": "user",
-                "content": CONSOLIDATION_PROMPT.format(
-                    user=self.config.user_name, known=known, transcript=transcript
-                ),
-            }],
+            messages=[{"role": "user", "content": self._consolidation_prompt(transcript, known)}],
             output_config={"effort": "low", "format": {"type": "json_schema", "schema": CONSOLIDATION_SCHEMA}},
             **_FALLBACK,
         )
@@ -388,6 +398,13 @@ class Brain:
             return None
         text = next((b.text for b in response.content if b.type == "text"), "")
         return json.loads(text)
+
+    def interrupt(self) -> None:
+        """Coupe la réponse en cours (appelé depuis un autre thread)."""
+        self._cancel = True
+
+    def close(self) -> None:
+        pass
 
     def reset(self) -> None:
         """Nouvelle conversation : l'actuelle est d'abord consolidée dans la mémoire."""

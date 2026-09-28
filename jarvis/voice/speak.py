@@ -30,10 +30,18 @@ def clean_for_speech(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def synth_edge(text: str, voice: str, rate: str = "+0%") -> np.ndarray:
-    """Synthétise une phrase avec une voix neuronale Microsoft Edge (nécessite internet)."""
-    import edge_tts
+def _decode_mp3(mp3: bytes) -> np.ndarray:
     import miniaudio
+
+    decoded = miniaudio.decode(
+        mp3, output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1, sample_rate=SAMPLE_RATE
+    )
+    return np.array(decoded.samples, dtype=np.int16)
+
+
+def synth_edge(text: str, voice: str, rate: str = "+0%") -> np.ndarray:
+    """Synthétise une phrase avec une voix neuronale Microsoft Edge (gratuit, nécessite internet)."""
+    import edge_tts
 
     async def synthesize() -> bytes:
         audio = bytearray()
@@ -43,20 +51,47 @@ def synth_edge(text: str, voice: str, rate: str = "+0%") -> np.ndarray:
                 audio.extend(chunk["data"])
         return bytes(audio)
 
-    mp3 = asyncio.run(synthesize())
-    decoded = miniaudio.decode(
-        mp3, output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1, sample_rate=SAMPLE_RATE
+    return _decode_mp3(asyncio.run(synthesize()))
+
+
+class ElevenLabsQuotaError(RuntimeError):
+    """Clé refusée ou crédits épuisés : inutile de réessayer pendant la session."""
+
+
+def synth_elevenlabs(text: str, api_key: str, voice_id: str, model: str) -> np.ndarray:
+    """Synthétise une phrase avec ElevenLabs (voix premium, payante au-delà du quota gratuit)."""
+    import requests
+
+    response = requests.post(
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+        params={"output_format": "mp3_44100_128"},
+        headers={"xi-api-key": api_key, "accept": "audio/mpeg"},
+        json={"text": text, "model_id": model},
+        timeout=20,
     )
-    return np.array(decoded.samples, dtype=np.int16)
+    if response.status_code in (401, 402, 403, 429):
+        try:
+            detail = response.json().get("detail", {})
+            message = detail.get("message", "") if isinstance(detail, dict) else str(detail)
+        except ValueError:
+            message = response.text[:200]
+        raise ElevenLabsQuotaError(message or f"erreur {response.status_code}")
+    response.raise_for_status()
+    return _decode_mp3(response.content)
 
 
 class Speaker:
     def __init__(self, voice: str, rate: str = "+0%",
-                 on_state: Callable[[bool], None] | None = None) -> None:
+                 on_state: Callable[[bool], None] | None = None,
+                 elevenlabs: dict | None = None,
+                 on_warning: Callable[[str], None] | None = None) -> None:
         import sounddevice  # noqa: F401  (échoue tout de suite s'il n'y a pas d'audio)
 
         self.voice = voice
         self.rate = rate
+        # {"api_key", "voice_id", "model"} pour utiliser ElevenLabs, sinon voix Edge gratuite.
+        self.elevenlabs = elevenlabs if elevenlabs and elevenlabs.get("api_key") else None
+        self.on_warning = on_warning or (lambda message: None)
         self.on_state = on_state or (lambda speaking: None)
         self._texts: queue.Queue[tuple[int, str]] = queue.Queue()
         self._audio: queue.Queue[tuple[int, np.ndarray]] = queue.Queue()
@@ -68,6 +103,14 @@ class Speaker:
         self._offline = None
         threading.Thread(target=self._synth_loop, daemon=True, name="tts-synth").start()
         threading.Thread(target=self._play_loop, daemon=True, name="tts-play").start()
+
+    @classmethod
+    def from_config(cls, config) -> "Speaker":
+        premium = None
+        if config.tts_engine == "elevenlabs" and config.elevenlabs_api_key:
+            premium = {"api_key": config.elevenlabs_api_key, "voice_id": config.elevenlabs_voice_id,
+                       "model": config.elevenlabs_model}
+        return cls(config.tts_voice, config.tts_rate, elevenlabs=premium)
 
     @property
     def speaking(self) -> bool:
@@ -110,7 +153,12 @@ class Speaker:
             audio = None
             if generation == self._generation:
                 try:
-                    audio = self._synth_edge(text)
+                    audio = self._synth_premium(text)
+                except Exception:
+                    audio = None
+                try:
+                    if audio is None:
+                        audio = self._synth_edge(text)
                 except Exception:
                     try:
                         audio = self._synth_offline(text)
@@ -134,6 +182,17 @@ class Speaker:
                 pass
             finally:
                 self._done_one()
+
+    def _synth_premium(self, text: str) -> np.ndarray | None:
+        if not self.elevenlabs:
+            return None
+        try:
+            return synth_elevenlabs(text, self.elevenlabs["api_key"], self.elevenlabs["voice_id"],
+                                    self.elevenlabs["model"])
+        except ElevenLabsQuotaError as exc:
+            self.elevenlabs = None  # plus de crédits : voix gratuite pour le reste de la session
+            self.on_warning(f"ElevenLabs indisponible ({exc}) : je passe sur la voix gratuite.")
+            return None
 
     def _synth_edge(self, text: str) -> np.ndarray:
         return synth_edge(text, self.voice, self.rate)

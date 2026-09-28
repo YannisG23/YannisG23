@@ -1,4 +1,4 @@
-"""Point d'entrée : python -m jarvis [--text] [--doctor] [--no-dashboard] [--no-browser] [--setup-google] [--memory]."""
+"""Point d'entrée : python -m jarvis [--text] [--login] [--doctor] [--no-dashboard] [--no-browser] [--setup-google] [--memory]."""
 
 from __future__ import annotations
 
@@ -14,10 +14,18 @@ def main() -> None:
     parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur au démarrage")
     parser.add_argument("--setup-google", action="store_true", help="connecter Gmail et Google Agenda")
     parser.add_argument("--memory", action="store_true", help="afficher ce que Jarvis sait de toi")
+    parser.add_argument("--login", action="store_true", help="connecter ton compte Claude (abonnement)")
     parser.add_argument("--doctor", action="store_true", help="vérifier l'installation (clé, micro, voix...)")
     args = parser.parse_args()
     config = Config()
 
+    if args.login:
+        if not config.uses_subscription:
+            print("Mode API (JARVIS_BRAIN=api) : pas de compte à connecter, la clé API suffit.")
+            return
+        from .brain_subscription import login
+
+        raise SystemExit(login())
     if args.doctor:
         from .doctor import run_doctor
 

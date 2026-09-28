@@ -64,12 +64,22 @@ class VoiceLoop:
                 continue
 
             if core.busy or core.speaker.speaking:
-                listener.drain()  # ne pas s'entendre soi-même
+                if core.config.barge_in and listener.has_wake_word:
+                    # « Hey Jarvis » pendant qu'il parle ou réfléchit : il se tait et t'écoute.
+                    # Seuil plus exigeant, pour ne pas se déclencher sur sa propre voix.
+                    strict = min(0.95, listener.wake_threshold + 0.2)
+                    if listener.wait_for_wake_word(timeout=0.3, threshold=strict, adapt=False):
+                        core.stop_speaking()
+                        core.bus.publish("barge_in")
+                        self._push_to_talk.set()  # écoute dès que la réponse abandonnée est close
+                else:
+                    listener.drain()  # ne pas s'entendre soi-même
                 continue
 
             if core.awaiting_follow_up:
                 # Mode conversation : on peut enchaîner sans redire « Hey Jarvis ».
                 core.awaiting_follow_up = False
+                self._push_to_talk.clear()  # déjà à l'écoute : pas de deuxième écoute derrière
                 listener.flush()
                 text = self._listen(core.config.follow_up_seconds)
                 if text:
