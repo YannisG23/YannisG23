@@ -13,7 +13,7 @@ def main() -> None:
     parser.add_argument("--no-dashboard", action="store_true", help="ne pas lancer le centre de commande")
     parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur au démarrage")
     parser.add_argument("--setup-google", action="store_true", help="connecter Gmail et Google Agenda")
-    parser.add_argument("--memory", action="store_true", help="afficher ce que Jarvis sait de toi")
+    parser.add_argument("--memory", action="store_true", help="afficher ce que l'assistant sait de toi")
     parser.add_argument("--login", action="store_true", help="connecter ton compte Claude (abonnement)")
     parser.add_argument("--doctor", action="store_true", help="vérifier l'installation (clé, micro, voix...)")
     args = parser.parse_args()

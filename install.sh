@@ -37,4 +37,4 @@ fi
 python -m jarvis --login || true
 python -m jarvis --doctor || true
 echo
-echo "Installation terminée. Lance Jarvis avec : ./jarvis.sh"
+echo "Installation terminée. Lance ton assistant avec : ./jarvis.sh"

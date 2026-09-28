@@ -192,7 +192,7 @@ class SubscriptionBrain(Brain):
         except Exception as exc:
             name = type(exc).__name__
             if name == "CLINotFoundError":
-                raise BrainError("Je ne trouve pas Claude Code. Réinstalle Jarvis avec install point bat.") from exc
+                raise BrainError("Je ne trouve pas Claude Code. Relance l'installation avec install point bat.") from exc
             if name in {"ProcessError", "CLIConnectionError"}:
                 self._client = None  # on repartira sur une connexion neuve
                 raise BrainError(

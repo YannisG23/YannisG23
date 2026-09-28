@@ -33,8 +33,8 @@ class Config:
     idle_minutes: float = field(default_factory=lambda: float(_env("JARVIS_IDLE_MINUTES", "20")))
 
     # Identité
-    # Le nom de l'assistant : c'est aussi le mot qui le réveille (« Jarvis, mets de la musique »).
-    assistant_name: str = field(default_factory=lambda: _env("JARVIS_NAME", "Jarvis"))
+    # Le nom de l'assistant : c'est aussi le mot qui le réveille (« Orion, mets de la musique »).
+    assistant_name: str = field(default_factory=lambda: _env("JARVIS_NAME", "Orion"))
     # Autres orthographes que la transcription pourrait produire, séparées par des virgules.
     name_aliases: list[str] = field(
         default_factory=lambda: [a.strip() for a in _env("JARVIS_NAME_ALIASES", "").split(",") if a.strip()]

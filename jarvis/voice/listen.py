@@ -51,7 +51,7 @@ class Listener:
             openwakeword.utils.download_models(["hey_jarvis"])
             return Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
         except Exception as exc:  # pas bloquant : on passe en mode « appuie sur Entrée »
-            print(f"[Jarvis] Mot d'activation indisponible ({exc}). Mode appui sur Entrée.")
+            print(f"[Assistant] Mot d'activation indisponible ({exc}). Mode appui sur Entrée.")
             return None
 
     @property

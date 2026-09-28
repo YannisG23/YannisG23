@@ -528,7 +528,7 @@ def test_subscription_brain_streams_and_uses_subscription(sub_brain, memory):
     assert "".join(deltas) == reply
     assert "ANTHROPIC_API_KEY" not in os.environ  # sinon Claude Code facturerait l'API
     opts = sdk.options[0]
-    assert "Tu es Jarvis" in opts.system_prompt and "guitare" in opts.system_prompt
+    assert "Tu es Orion" in opts.system_prompt and "guitare" in opts.system_prompt
     assert "mcp__jarvis__remember" in opts.allowed_tools and "WebSearch" in opts.allowed_tools
     assert opts.tools == ["WebSearch", "WebFetch"] and opts.setting_sources == []
     assert opts.include_partial_messages and opts.model == "claude-opus-5"
@@ -609,6 +609,10 @@ def test_name_spotter_natural_phrases():
     assert spot.find("J'ai revu le film avec Jarvis dans Iron Man hier soir, c'était bien")[0] is False
     assert spot.find("le service est fermé")[0] is False
     assert NameSpotter("Nova").find("Nova, lance un minuteur") == (True, "lance un minuteur")
+    orion = NameSpotter("Orion")
+    assert orion.find("Orion, quelle heure est-il ?") == (True, "quelle heure est-il")
+    assert orion.find("Orian, mets la musique") == (True, "mets la musique")  # erreur de transcription
+    assert orion.find("On voit la constellation d'Orion ce soir dans le ciel bien dégagé")[0] is False
     assert NameSpotter("Tony Stark").find("Tony Stark, allume la lumière") == (True, "allume la lumière")
 
 
@@ -623,7 +627,7 @@ def test_voice_loop_submits_command_said_with_name(config, memory):
         level = 0.0
 
         def __init__(self):
-            self.heard = ["on regarde un film ce soir", "Jarvis, mets du rap"]
+            self.heard = ["on regarde un film ce soir", "Orion, mets du rap"]
 
         def record_utterance(self, start_timeout, max_seconds):
             return np.zeros(16000, dtype=np.int16)

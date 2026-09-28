@@ -214,7 +214,7 @@ def write_clipboard(text: str) -> str:
 
 
 @registry.tool(
-    "Programme un minuteur ou un rappel. Jarvis préviendra l'utilisateur à voix haute.",
+    "Programme un minuteur ou un rappel. L'assistant préviendra l'utilisateur à voix haute.",
     properties={
         "seconds": {"type": "integer", "description": "Délai en secondes."},
         "label": {"type": "string", "description": "Ce qu'il faudra rappeler."},

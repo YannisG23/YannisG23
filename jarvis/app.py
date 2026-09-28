@@ -42,7 +42,7 @@ def _print_events(core: Core, pending: dict) -> None:
             console.print(f"[dim]🧠 Conversation mémorisée ({d['facts']} nouveaux faits) : {escape(d['summary'])}[/]")
         elif kind == "confirm_request":
             pending["id"] = d["id"]
-            console.print(f"[bold yellow]⚠ Jarvis veut {escape(d['action'])}. Réponds o/n (ou à la voix, ou dans le centre de commande).[/]")
+            console.print(f"[bold yellow]⚠ {escape(core.config.assistant_name)} veut {escape(d['action'])}. Réponds o/n (ou à la voix, ou dans le centre de commande).[/]")
         elif kind == "confirm_resolved":
             if pending.get("id") == d["id"]:
                 pending.clear()

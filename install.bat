@@ -38,7 +38,7 @@ python -m jarvis --login
 echo.
 python -m jarvis --doctor
 echo.
-echo Installation terminee. Double-clique sur jarvis.bat pour lancer Jarvis.
+echo Installation terminee. Double-clique sur jarvis.bat pour lancer ton assistant.
 pause
 exit /b 0
 

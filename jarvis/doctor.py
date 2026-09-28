@@ -198,7 +198,7 @@ def run_doctor(config: Config) -> int:
                              "Si la clé est bonne, vérifie JARVIS_MODEL et le crédit du compte.")
     check.run("Mémoire", lambda: _memory(config))
     check.run("Centre de commande", lambda: _port(config),
-              "Un autre Jarvis tourne déjà ? Sinon change JARVIS_DASHBOARD_PORT.")
+              "Un autre assistant tourne déjà ? Sinon change JARVIS_DASHBOARD_PORT.")
     check.run("Contrôle du PC", _imports(["pyautogui", "pyperclip", "PIL"]), 'pip install -e ".[all]"', optional=True)
 
     voice_libs = check.run("Bibliothèques vocales",
@@ -206,12 +206,12 @@ def run_doctor(config: Config) -> int:
                            'pip install -e ".[voice]" (sous Linux : sudo apt install libportaudio2)')
     if voice_libs:
         check.run("Voix neuronale (internet)", lambda: _edge_voice(config),
-                  "Pas d'accès à la voix en ligne : Jarvis utilisera la voix du système (pyttsx3).",
+                  "Pas d'accès à la voix en ligne : il utilisera la voix du système (pyttsx3).",
                   optional=True)
         if config.tts_engine == "elevenlabs":
             check.run("Voix ElevenLabs", lambda: _elevenlabs(config),
                       "Vérifie ELEVENLABS_API_KEY (elevenlabs.io → Profile → API keys). "
-                      "Sans elle, Jarvis utilise la voix gratuite.", optional=True)
+                      "Sans elle, il utilise la voix gratuite.", optional=True)
         check.run("Haut-parleurs", lambda: _voice(config),
                   "Vérifie la sortie audio par défaut de ton système.")
         check.run("Micro", _microphone,
@@ -231,11 +231,11 @@ def run_doctor(config: Config) -> int:
 
     console.rule()
     if check.failures:
-        console.print(f"[red]{check.failures} problème(s) à corriger[/] avant de lancer Jarvis.")
+        console.print(f"[red]{check.failures} problème(s) à corriger[/] avant de lancer l'assistant.")
     elif check.warnings:
         console.print(f"[green]Prêt ![/] ({check.warnings} option(s) non disponible(s)). Lance : python -m jarvis")
     else:
         console.print("[green]Tout est prêt.[/] Lance : python -m jarvis")
     if not brain_ok:
-        console.print("[dim]Sans cerveau connecté, Jarvis ne peut pas réfléchir.[/]")
+        console.print("[dim]Sans cerveau connecté, il ne peut pas réfléchir.[/]")
     return 1 if check.failures else 0
