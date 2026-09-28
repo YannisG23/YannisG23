@@ -86,7 +86,7 @@ def search_conversations(ctx: ToolContext, query: str = "", days: int = 30) -> s
     rows = ctx.memory.search_log(query, days=days)
     if not rows:
         return "Rien trouvé dans les conversations sur cette période."
-    who = {"user": ctx.config.user_name, "assistant": "Jarvis"}
+    who = {"user": ctx.config.user_name, "assistant": ctx.config.assistant_name}
     return "\n".join(f"[{created[:16].replace('T', ' ')}] {who.get(role, role)} : {content[:400]}"
                      for role, content, created in rows)
 

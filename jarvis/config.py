@@ -33,6 +33,12 @@ class Config:
     idle_minutes: float = field(default_factory=lambda: float(_env("JARVIS_IDLE_MINUTES", "20")))
 
     # Identité
+    # Le nom de l'assistant : c'est aussi le mot qui le réveille (« Jarvis, mets de la musique »).
+    assistant_name: str = field(default_factory=lambda: _env("JARVIS_NAME", "Jarvis"))
+    # Autres orthographes que la transcription pourrait produire, séparées par des virgules.
+    name_aliases: list[str] = field(
+        default_factory=lambda: [a.strip() for a in _env("JARVIS_NAME_ALIASES", "").split(",") if a.strip()]
+    )
     user_name: str = field(default_factory=lambda: _env("JARVIS_USER_NAME", "Yannis"))
     language: str = field(default_factory=lambda: _env("JARVIS_LANGUAGE", "fr"))
     country: str = field(default_factory=lambda: _env("JARVIS_COUNTRY", ""))
@@ -47,10 +53,12 @@ class Config:
     # « Daniel » : voix masculine posée à l'accent britannique, multilingue.
     elevenlabs_voice_id: str = field(default_factory=lambda: _env("ELEVENLABS_VOICE_ID", "onwK4e9ZLuTAKqWW03F9"))
     elevenlabs_model: str = field(default_factory=lambda: _env("ELEVENLABS_MODEL", "eleven_flash_v2_5"))
-    # Couper la parole à Jarvis en disant « Hey Jarvis » pendant qu'il parle.
+    # Couper la parole à l'assistant en l'appelant pendant qu'il parle.
     barge_in: bool = field(
         default_factory=lambda: _env("JARVIS_BARGE_IN", "1").lower() not in {"0", "false", "non", "no"}
     )
+    # Activation : « nom » (dire son nom, naturellement) ou « hey » (« Hey Jarvis », plus léger pour le PC).
+    wake_mode: str = field(default_factory=lambda: _env("JARVIS_WAKE_MODE", "nom").lower())
     whisper_model: str = field(default_factory=lambda: _env("JARVIS_WHISPER_MODEL", "small"))
     wake_threshold: float = field(default_factory=lambda: float(_env("JARVIS_WAKE_THRESHOLD", "0.5")))
     follow_up_seconds: float = field(default_factory=lambda: float(_env("JARVIS_FOLLOW_UP_SECONDS", "6")))
@@ -71,6 +79,10 @@ class Config:
 
     def __post_init__(self) -> None:
         self.home.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def wake_by_name(self) -> bool:
+        return self.wake_mode not in {"hey", "hey_jarvis", "openwakeword"}
 
     @property
     def uses_subscription(self) -> bool:

@@ -30,7 +30,7 @@ def _print_events(core: Core, pending: dict) -> None:
             icon = "🎙" if d.get("source") == "voice" else "›"
             console.print(f"[bold cyan]Toi {icon}[/] {escape(d['text'])}")
         elif kind == "assistant_message" and d.get("text"):
-            console.print(Panel(Text(d["text"]), title="[bold]J.A.R.V.I.S.[/]", border_style="bright_blue", expand=False))
+            console.print(Panel(Text(d["text"]), title=f"[bold]{escape(core.config.assistant_name)}[/]", border_style="bright_blue", expand=False))
         elif kind == "tool_start":
             args = escape(", ".join(f"{k}={str(v)[:50]}" for k, v in (d.get("args") or {}).items()))
             console.print(f"[dim]  ⚙ {d['name']}({args})[/]")
@@ -55,10 +55,10 @@ def _greeting(config: Config, now: datetime) -> str:
     if now.hour < 5 or now.hour >= 22:
         return f"Encore debout, {config.user_name} ? Je suis là si tu as besoin."
     if now.hour < 12:
-        return f"Bonjour {config.user_name}. Tous les systèmes sont opérationnels."
+        return f"Bonjour {config.user_name}. Je suis prêt, dis-moi."
     if now.hour < 18:
-        return f"Bon après-midi {config.user_name}. Je suis prêt."
-    return f"Bonsoir {config.user_name}. Tous les systèmes sont opérationnels."
+        return f"Re-bonjour {config.user_name}. Qu'est-ce qu'on fait ?"
+    return f"Bonsoir {config.user_name}. Je suis là."
 
 
 def _first_launch_today(config: Config, now: datetime) -> bool:
@@ -83,7 +83,8 @@ def _start_voice(config: Config, core: Core):
 
     try:
         with console.status("[bright_blue]Chargement de la reconnaissance vocale…[/]"):
-            listener = Listener(config.whisper_model, config.language, config.wake_threshold)
+            listener = Listener(config.whisper_model, config.language, config.wake_threshold,
+                                use_wake_model=not config.wake_by_name, name=config.assistant_name)
     except Exception as exc:
         console.print(f"[red]Micro ou reconnaissance vocale indisponible : {escape(str(exc))}[/]\n"
                       "[yellow]Je continue au clavier et dans le centre de commande. "
@@ -131,11 +132,10 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
     lines = []
     if board:
         lines.append(f"Centre de commande : [link={board.url}]{board.url}[/link]")
-    if listener:
-        lines.append("Dis « Hey Jarvis » pour me parler." if listener.has_wake_word
-                     else "Appuie sur Entrée (champ vide) pour me parler.")
+    if core.voice:
+        lines.append(core.voice.activation_hint + ". Entrée (champ vide) marche aussi.")
     lines.append("Tu peux aussi écrire ici. « quit » pour quitter.")
-    console.print(Panel("\n".join(lines), title="J.A.R.V.I.S. en ligne", border_style="bright_blue"))
+    console.print(Panel("\n".join(lines), title=f"{escape(config.assistant_name)} est en ligne", border_style="bright_blue"))
     if board and open_browser:
         webbrowser.open(board.url)
 
@@ -156,7 +156,7 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
                 core.resolve_confirm(pending["id"], text.lower() in {"o", "y"} or is_yes(text))
                 continue
             if not text:
-                if core.voice and not listener.has_wake_word:
+                if core.voice:
                     core.voice.push_to_talk()
                 continue
             if _EXIT.match(text):

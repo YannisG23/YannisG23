@@ -11,6 +11,7 @@ import queue
 import re
 import tempfile
 import threading
+import time
 import wave
 from pathlib import Path
 from typing import Callable
@@ -54,6 +55,12 @@ def synth_edge(text: str, voice: str, rate: str = "+0%") -> np.ndarray:
     return _decode_mp3(asyncio.run(synthesize()))
 
 
+def _envelope(audio: np.ndarray, step: int = int(SAMPLE_RATE * 0.04)) -> np.ndarray:
+    frames = audio[: len(audio) // step * step].astype(np.float32).reshape(-1, step)
+    rms = np.sqrt(np.mean(frames ** 2, axis=1)) if len(frames) else np.zeros(0)
+    return np.clip(rms / 6000.0, 0.0, 1.0)
+
+
 class ElevenLabsQuotaError(RuntimeError):
     """Clé refusée ou crédits épuisés : inutile de réessayer pendant la session."""
 
@@ -92,9 +99,12 @@ class Speaker:
         # {"api_key", "voice_id", "model"} pour utiliser ElevenLabs, sinon voix Edge gratuite.
         self.elevenlabs = elevenlabs if elevenlabs and elevenlabs.get("api_key") else None
         self.on_warning = on_warning or (lambda message: None)
+        self.on_play: Callable[[str], None] = lambda text: None  # phrase qui commence à être dite
+        self._envelope: np.ndarray | None = None  # volume de la phrase en cours, par tranches de 40 ms
+        self._play_started = 0.0
         self.on_state = on_state or (lambda speaking: None)
         self._texts: queue.Queue[tuple[int, str]] = queue.Queue()
-        self._audio: queue.Queue[tuple[int, np.ndarray]] = queue.Queue()
+        self._audio: queue.Queue[tuple[int, np.ndarray, str]] = queue.Queue()
         self._generation = 0  # incrémenté par stop() pour jeter ce qui est en attente
         self._pending = 0
         self._lock = threading.Lock()
@@ -115,6 +125,15 @@ class Speaker:
     @property
     def speaking(self) -> bool:
         return not self._idle.is_set()
+
+    @property
+    def level(self) -> float:
+        """Volume de la voix en ce moment, entre 0 et 1 (pour l'animation)."""
+        envelope = self._envelope
+        if envelope is None:
+            return 0.0
+        index = int((time.monotonic() - self._play_started) / 0.04)
+        return float(envelope[index]) if 0 <= index < len(envelope) else 0.0
 
     def say(self, text: str) -> None:
         """Ajoute une phrase à dire (non bloquant)."""
@@ -167,20 +186,24 @@ class Speaker:
             if audio is None:
                 self._done_one()
             else:
-                self._audio.put((generation, audio))
+                self._audio.put((generation, audio, text))
 
     def _play_loop(self) -> None:
         import sounddevice as sd
 
         while True:
-            generation, audio = self._audio.get()
+            generation, audio, text = self._audio.get()
             try:
                 if generation == self._generation:
+                    self._envelope = _envelope(audio)
+                    self._play_started = time.monotonic()
+                    self.on_play(text)
                     sd.play(audio, samplerate=SAMPLE_RATE)
                     sd.wait()
             except Exception:
                 pass
             finally:
+                self._envelope = None
                 self._done_one()
 
     def _synth_premium(self, text: str) -> np.ndarray | None:
@@ -221,6 +244,7 @@ class SilentSpeaker:
     """Utilisé sans audio (mode texte) : même interface, aucun son."""
 
     speaking = False
+    level = 0.0
 
     def say(self, text: str) -> None:
         pass

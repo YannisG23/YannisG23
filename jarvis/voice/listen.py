@@ -19,14 +19,17 @@ _HALLUCINATIONS = re.compile(
 
 
 class Listener:
-    def __init__(self, whisper_model: str, language: str, wake_threshold: float = 0.5) -> None:
+    def __init__(self, whisper_model: str, language: str, wake_threshold: float = 0.5,
+                 use_wake_model: bool = True, name: str = "") -> None:
         import sounddevice as sd
         from faster_whisper import WhisperModel
 
         self.language = language
         self.wake_threshold = wake_threshold
         self.stt = WhisperModel(whisper_model, device="auto", compute_type="int8")
-        self.wake = self._load_wake_model()
+        self.name = name
+        # En mode « nom », pas besoin du modèle « Hey Jarvis » : la transcription suffit.
+        self.wake = self._load_wake_model() if use_wake_model else None
         self._frames: queue.Queue[np.ndarray] = queue.Queue()
         self._stream = sd.InputStream(
             samplerate=SAMPLE_RATE,
@@ -124,7 +127,8 @@ class Listener:
             frame = self._next_frame()
             if frame is None:
                 continue
-            self.level = _rms(frame)
+            # Avant qu'on parle, le silence sert aussi à suivre le bruit de fond.
+            self._observe(frame, adapt=not started)
             loud = self.level > threshold
             if not started:
                 waited += frame_seconds
@@ -139,12 +143,15 @@ class Listener:
             if silent_for >= end_silence or len(frames) * frame_seconds >= max_seconds:
                 return np.concatenate(frames)
 
-    def transcribe(self, audio: np.ndarray) -> str:
+    def transcribe(self, audio: np.ndarray, fast: bool = False) -> str:
+        """fast=True : passe rapide, pour repérer le nom dans ce qui se dit autour du micro."""
         segments, _ = self.stt.transcribe(
             audio.astype(np.float32) / 32768.0,
             language=self.language,
-            beam_size=5,
+            beam_size=1 if fast else 5,
             vad_filter=True,
+            # Aide Whisper à bien écrire le nom de l'assistant.
+            initial_prompt=f"{self.name}," if self.name else None,
         )
         text = " ".join(s.text.strip() for s in segments).strip()
         return "" if _HALLUCINATIONS.search(text) else text

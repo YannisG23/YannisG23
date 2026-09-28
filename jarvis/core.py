@@ -90,6 +90,9 @@ class Core:
         self.speaker = speaker or SilentSpeaker()
         if hasattr(self.speaker, "on_state"):
             self.speaker.on_state = self._on_speaking
+        if hasattr(self.speaker, "on_play"):
+            # Sous-titre synchronisé : la phrase s'affiche quand elle commence à être dite.
+            self.speaker.on_play = lambda text: self.bus.publish("caption", {"text": text})
         if config.uses_subscription and client is None:
             from .brain_subscription import SubscriptionBrain
 
@@ -110,6 +113,7 @@ class Core:
         self._running = True
         threading.Thread(target=self._worker, daemon=True, name="jarvis-brain").start()
         threading.Thread(target=self._watcher, daemon=True, name="jarvis-watcher").start()
+        threading.Thread(target=self._levels, daemon=True, name="jarvis-levels").start()
 
     # ------------------------------------------------------------------ état
 
@@ -273,6 +277,18 @@ class Core:
         return True
 
     # ----------------------------------------------------------- tâches de fond
+
+    def _levels(self) -> None:
+        """Niveaux sonores (micro et voix) ~14 fois par seconde, pour animer le centre de commande."""
+        last = (0.0, 0.0)
+        while self._running:
+            time.sleep(0.07)
+            mic = min(1.0, self.voice.listener.level / 3000.0) if self.voice else 0.0
+            out = float(getattr(self.speaker, "level", 0.0) or 0.0)
+            current = (round(mic, 2), round(out, 2))
+            if current != last and (max(current) > 0.01 or max(last) > 0.01):
+                self.bus.publish("levels", {"mic": current[0], "out": current[1]})
+            last = current
 
     def _watcher(self) -> None:
         last_calendar_check = 0.0

@@ -70,6 +70,8 @@ class Dashboard:
         core, config = self.core, self.core.config
         return {
             "state": core.state,
+            "name": config.assistant_name,
+            "hint": core.voice.activation_hint if core.voice else "Mode clavier : écris ta demande ci-dessous",
             "user": config.user_name,
             "model": config.model,
             "effort": config.effort,

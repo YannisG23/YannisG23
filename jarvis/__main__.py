@@ -8,7 +8,7 @@ from .config import Config
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="jarvis", description="Ton assistant personnel J.A.R.V.I.S.")
+    parser = argparse.ArgumentParser(prog="jarvis", description="Ton assistant personnel")
     parser.add_argument("--text", action="store_true", help="sans micro ni voix (clavier et centre de commande)")
     parser.add_argument("--no-dashboard", action="store_true", help="ne pas lancer le centre de commande")
     parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur au démarrage")

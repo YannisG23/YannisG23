@@ -183,7 +183,7 @@ def _memory(config: Config) -> str:
 
 
 def run_doctor(config: Config) -> int:
-    console.rule("[bold bright_blue]Diagnostic J.A.R.V.I.S.")
+    console.rule(f"[bold bright_blue]Diagnostic de {escape(config.assistant_name)}")
     check = Check()
     check.run("Python", _python, "Installe Python 3.11 ou 3.12 depuis python.org.")
     check.run("Bibliothèques de base", _imports(["anthropic", "claude_agent_sdk", "rich", "requests", "psutil", "numpy", "dotenv"]),
@@ -219,9 +219,12 @@ def run_doctor(config: Config) -> int:
         check.run("Reconnaissance vocale (Whisper)", lambda: _whisper(config),
                   "Le premier chargement télécharge le modèle : il faut internet. "
                   "Essaie JARVIS_WHISPER_MODEL=base si ton PC est lent.")
-        check.run("Mot d'activation", _wake_word,
-                  "Sans lui, clique sur le micro du centre de commande ou appuie sur Entrée. "
-                  "Sous Linux, utilise Python 3.10 ou 3.11.", optional=True)
+        if config.wake_by_name:
+            check.run("Activation", lambda: f"dis simplement « {config.assistant_name}, … » (mode nom)")
+        else:
+            check.run("Mot d'activation", _wake_word,
+                      "Sans lui, clique sur le micro du centre de commande ou appuie sur Entrée. "
+                      "Sous Linux, utilise Python 3.10 ou 3.11.", optional=True)
     check.run("Gmail et Agenda", lambda: _google(config),
               "Optionnel : suis la section « Connecter Gmail » du README puis python -m jarvis --setup-google.",
               optional=True)

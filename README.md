@@ -1,6 +1,6 @@
 # J.A.R.V.I.S. — ton assistant personnel
 
-Un Jarvis de bureau façon Iron Man : tu dis « **Hey Jarvis** », tu parles, il te répond avec une voix naturelle et agit sur ton ordinateur, tes e-mails, ton agenda et tes tâches. Il se souvient de toi d'une conversation à l'autre, et tout se pilote depuis un **centre de commande** dans ton navigateur.
+Ton assistant personnel de bureau : tu l'appelles par son nom, comme une personne (« **Jarvis, mets de la musique** »), il te répond avec une voix naturelle et agit sur ton ordinateur, tes e-mails, ton agenda et tes tâches. Il se souvient de toi d'une conversation à l'autre, et tout se pilote depuis un **centre de commande** dans ton navigateur.
 
 Son cerveau est **Claude**, branché sur **ton abonnement Claude** (Pro ou Max) via Claude Code : pas de facture à l'usage. L'écoute, la voix, la mémoire et le centre de commande tournent sur ton PC.
 
@@ -8,8 +8,8 @@ Son cerveau est **Claude**, branché sur **ton abonnement Claude** (Pro ou Max) 
 
 | Domaine | Exemples |
 |---|---|
-| Conversation vocale | « Hey Jarvis », puis mode conversation (tu enchaînes sans le redire). Il commence à parler dès la première phrase de sa réponse, et tu peux lui couper la parole en disant « Hey Jarvis » (ou Échap, ou le bouton ■). |
-| Centre de commande | Réacteur animé (veille, écoute, réflexion, parole), conversation en direct, état du PC, météo, agenda, e-mails, mémoire modifiable, tâches, minuteurs, journal des actions, boutons « Briefing » et « Nouvelle conversation ». |
+| Conversation vocale | Tu l'appelles par son nom, au début ou à la fin de ta phrase (« Jarvis, quel temps demain ? », « … baisse le son, Jarvis »), puis tu enchaînes sans le rappeler. Il commence à parler dès la première phrase de sa réponse, et tu lui coupes la parole en l'appelant (ou Échap, ou le bouton ■). Son nom se change dans `.env`. |
+| Centre de commande | Une présence animée qui réagit à ta voix et à la sienne, avec ses paroles en sous-titres ; conversation en direct, état du PC, météo, agenda, e-mails, mémoire modifiable, tâches, minuteurs, journal des actions, boutons « Faire le point » et « Nouvelle conversation », palette de commandes et raccourcis clavier. |
 | Mémoire | Il retient seul ce qui compte (goûts, proches, projets, habitudes), retrouve les souvenirs utiles à chaque message et résume chaque conversation. Tu peux lui demander « de quoi on a parlé mardi ? ». |
 | Briefing | « Fais-moi le point » : date, météo, agenda du jour, e-mails importants, tâches. |
 | Contrôle du PC | « Ouvre Spotify », « Mets du lo-fi », « Monte le son », « Regarde mon écran, c'est quoi cette erreur ? », « Qu'est-ce qui ralentit mon PC ? » |
@@ -50,7 +50,7 @@ python -m jarvis --text     # sans micro ni voix : clavier + centre de commande
 python -m jarvis --memory   # voir ce que Jarvis a retenu de toi
 ```
 
-Au premier lancement, le modèle de reconnaissance vocale Whisper (~500 Mo pour `small`) et le modèle « Hey Jarvis » se téléchargent automatiquement. Si le micro pose problème, Jarvis démarre quand même, au clavier et dans le centre de commande.
+Au premier lancement, le modèle de reconnaissance vocale Whisper (~500 Mo pour `small`) se télécharge automatiquement. Si le micro pose problème, Jarvis démarre quand même, au clavier et dans le centre de commande.
 
 Le lien du centre de commande s'affiche dans le terminal (`http://127.0.0.1:8765/#token=…`). Garde l'onglet ouvert. Si tu le fermes, reprends le lien depuis le terminal.
 
@@ -63,6 +63,17 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 3. *Clients* → *Créer un client* → type **Application de bureau** → télécharge le JSON.
 4. Renomme-le `google_credentials.json` et place-le dans `~/.jarvis/` (sous Windows : `C:\Users\<toi>\.jarvis\`).
 5. Lance `python -m jarvis --setup-google` et accepte les autorisations dans le navigateur.
+
+### Raccourcis du centre de commande
+
+| Touche | Action |
+|---|---|
+| `Espace` | Parler |
+| `Échap` | L'interrompre, ou fermer une fenêtre |
+| `Ctrl` + `K` | Palette de commandes (ou taper directement une question) |
+| `/` | Écrire une demande |
+| `F` | Mode concentration : juste lui et la conversation |
+| `?` | Aide |
 
 ## Comment fonctionne sa mémoire
 
@@ -81,7 +92,10 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 | `JARVIS_VOICE` | Voix (`edge-tts --list-voices`) | `fr-FR-RemyMultilingualNeural` |
 | `JARVIS_VOICE_RATE` | Débit de parole | `+5%` |
 | `JARVIS_WHISPER_MODEL` | Précision de l'écoute : `base`, `small`, `medium`, `large-v3` | `small` |
-| `JARVIS_WAKE_THRESHOLD` | Sensibilité de « Hey Jarvis » (plus bas = plus sensible) | `0.5` |
+| `JARVIS_NAME` | Nom de l'assistant, et mot qui le réveille | `Jarvis` |
+| `JARVIS_NAME_ALIASES` | Autres orthographes du nom que la transcription pourrait écrire | vide |
+| `JARVIS_WAKE_MODE` | `nom` (l'appeler par son nom) ou `hey` (« Hey Jarvis », plus léger pour le PC) | `nom` |
+| `JARVIS_WAKE_THRESHOLD` | Sensibilité de « Hey Jarvis » en mode `hey` | `0.5` |
 | `JARVIS_FOLLOW_UP_SECONDS` | Attente d'une suite sans mot d'activation | `6` |
 | `JARVIS_DAILY_BRIEFING` | Briefing au premier lancement de la matinée | `1` |
 | `JARVIS_IDLE_MINUTES` | Inactivité avant de ranger la conversation en mémoire | `20` |
@@ -90,7 +104,7 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 
 | `JARVIS_TTS` | Voix : `edge` (gratuite) ou `elevenlabs` (premium) | `edge` |
 | `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID` | Clé et voix ElevenLabs | voix « Daniel » |
-| `JARVIS_BARGE_IN` | Couper la parole en disant « Hey Jarvis » | `1` |
+| `JARVIS_BARGE_IN` | Lui couper la parole en l'appelant | `1` |
 
 Autres voix naturelles en français : `fr-FR-VivienneMultilingualNeural`, `fr-FR-HenriNeural`, `fr-FR-DeniseNeural`, `fr-CA-ThierryNeural`.
 Pour des réponses plus rapides : `JARVIS_EFFORT=low`. Avec une carte graphique NVIDIA, Whisper l'utilise automatiquement, et `medium` ou `large-v3` deviennent confortables.
@@ -106,13 +120,14 @@ Ce mode abonnement est prévu pour **ton usage personnel**, sur ton PC et avec t
 
 ## Dépannage
 
-- **Il ne réagit pas à « Hey Jarvis »** : baisse `JARVIS_WAKE_THRESHOLD` à `0.3`. Si le modèle ne se charge pas, clique sur le micro du centre de commande, ou appuie sur Entrée dans le terminal.
+- **Il ne réagit pas quand tu l'appelles** : dis son nom au début ou à la fin de ta phrase, bien détaché. Si la transcription l'écrit autrement (visible dans le terminal), ajoute cette orthographe dans `JARVIS_NAME_ALIASES`. Tu peux aussi cliquer sur le micro, ou appuyer sur Espace dans le centre de commande.
+- **Le PC rame quand il écoute** : en mode `nom`, il transcrit ce qui se dit autour du micro pour repérer son nom. Sur un PC sans carte graphique NVIDIA, passe en `JARVIS_WAKE_MODE=hey` (« Hey Jarvis »), bien plus léger.
 - **Il s'entend parler** : utilise un casque, ou baisse le volume des haut-parleurs.
 - **Linux** : il faut `portaudio` (`sudo apt install libportaudio2`). Pour le mot d'activation, `tflite-runtime` n'existe pas pour toutes les versions de Python : utilise Python 3.10 ou 3.11.
 - **macOS** : autorise, pour ton terminal, le micro, l'*Accessibilité* (touches média) et l'*Enregistrement de l'écran* (« regarde mon écran »).
 - **Port occupé** : change `JARVIS_DASHBOARD_PORT`.
 - **« Je n'arrive pas à joindre Claude »** : relance `python -m jarvis --login`, puis `python -m jarvis --doctor`.
-- **Il se coupe tout seul pendant qu'il parle** : il a cru entendre « Hey Jarvis » dans sa propre voix. Utilise un casque, ou mets `JARVIS_BARGE_IN=0`.
+- **Il se coupe tout seul pendant qu'il parle** : il a cru s'entendre appeler dans sa propre voix. Utilise un casque, ou mets `JARVIS_BARGE_IN=0`.
 
 ## Architecture
 
@@ -127,7 +142,8 @@ jarvis/
 ├── memory.py            # mémoire SQLite : faits, conversations résumées, journal, tâches
 ├── config.py            # réglages (.env)
 ├── voice/
-│   ├── listen.py        # micro, « Hey Jarvis » (openWakeWord), Whisper (faster-whisper)
+│   ├── listen.py        # micro, Whisper (faster-whisper), « Hey Jarvis » en option (openWakeWord)
+│   ├── wakename.py      # repère son nom dans ce qui se dit (activation naturelle)
 │   ├── speak.py         # voix neuronale (edge-tts) en file, repli hors ligne (pyttsx3)
 │   └── loop.py          # boucle vocale : mot d'activation, conversation, confirmations
 ├── dashboard/

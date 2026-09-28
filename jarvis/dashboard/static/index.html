@@ -2,170 +2,201 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>J.A.R.V.I.S. — Centre de commande</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Centre de commande</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
-    <span class="brand-mark"></span>
-    <div>
-      <div class="brand-name">J.A.R.V.I.S.</div>
-      <div class="brand-sub" id="subtitle">Centre de commande</div>
-    </div>
-  </div>
-  <div class="clock"><div id="clock-time">--:--</div><div id="clock-date"></div></div>
-  <div class="top-actions">
-    <span class="link-dot" id="link-dot" title="Connexion au noyau"></span>
-    <button class="btn" id="btn-briefing">Briefing</button>
-    <button class="btn ghost" id="btn-reset" title="Résume la conversation dans la mémoire et repart à neuf">Nouvelle conversation</button>
-  </div>
-</header>
+<div class="banner" id="offline" hidden>Connexion perdue avec l'assistant. Nouvelle tentative…</div>
 
-<main class="grid">
-  <!-- Colonne gauche : système -->
-  <section class="col left">
-    <article class="card">
-      <h2>Système</h2>
-      <div class="meters">
-        <div class="meter"><span>Processeur</span><div class="bar"><i id="m-cpu"></i></div><b id="v-cpu">–</b></div>
-        <div class="meter"><span>Mémoire</span><div class="bar"><i id="m-ram"></i></div><b id="v-ram">–</b></div>
-        <div class="meter"><span>Disque</span><div class="bar"><i id="m-disk"></i></div><b id="v-disk">–</b></div>
-        <div class="meter" id="battery-row" hidden><span>Batterie</span><div class="bar"><i id="m-bat"></i></div><b id="v-bat">–</b></div>
-      </div>
-      <p class="muted small" id="sys-info"></p>
-    </article>
+<div class="app" id="app">
+  <!-- Colonne « Aujourd'hui » : tout ce qu'on regarde d'un coup d'œil -->
+  <aside class="today" aria-label="Aujourd'hui">
+    <header class="today-head">
+      <div class="clock" id="clock">--:--</div>
+      <div class="date" id="date"></div>
+    </header>
 
-    <article class="card">
+    <section class="glance" id="g-weather">
       <h2>Météo</h2>
-      <div id="weather" class="muted small">Règle JARVIS_CITY pour afficher la météo.</div>
-    </article>
+      <div class="glance-body muted" id="weather">Indique ta ville (JARVIS_CITY) pour voir la météo.</div>
+    </section>
 
-    <article class="card">
+    <section class="glance">
+      <h2>Agenda <button class="ghost-btn" id="btn-refresh" title="Actualiser l'agenda et les e-mails" aria-label="Actualiser">↻</button></h2>
+      <ol class="events" id="events"><li class="muted">Connecte Google pour voir ton agenda.</li></ol>
+    </section>
+
+    <section class="glance">
+      <h2>E-mails <span class="count" id="mail-count"></span></h2>
+      <ul class="mails" id="emails"><li class="muted">Gmail n'est pas connecté.</li></ul>
+    </section>
+
+    <section class="glance">
+      <h2>À faire</h2>
+      <ul class="tasks compact" id="tasks-today"></ul>
+    </section>
+
+    <section class="glance" id="g-timers" hidden>
       <h2>Minuteurs</h2>
-      <ul id="timers" class="list compact"><li class="muted small">Aucun minuteur.</li></ul>
-    </article>
+      <ul class="timers" id="timers"></ul>
+    </section>
+  </aside>
 
-    <article class="card">
-      <h2>Cerveau</h2>
-      <dl class="kv">
-        <dt>Modèle</dt><dd id="k-model">–</dd>
-        <dt>Réflexion</dt><dd id="k-effort">–</dd>
-        <dt>Voix</dt><dd id="k-voice">–</dd>
-        <dt>Mémoire</dt><dd id="k-memory">–</dd>
-      </dl>
-      <div class="ctx">
-        <div class="bar thin"><i id="m-ctx"></i></div>
-        <span class="muted small" id="v-ctx">Contexte de la conversation</span>
+  <!-- Scène : la présence de l'assistant et la conversation -->
+  <main class="stage" aria-label="Conversation">
+    <div class="stage-top">
+      <div class="identity">
+        <span class="name" id="name">Assistant</span>
+        <span class="state-pill" id="state-pill" data-state="idle"><i></i><b id="state-label">En veille</b></span>
       </div>
-    </article>
-  </section>
-
-  <!-- Centre : réacteur + conversation -->
-  <section class="col center">
-    <div class="reactor-wrap">
-      <div class="reactor" id="reactor" data-state="idle">
-        <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
-        <div class="core"></div>
+      <div class="stage-actions">
+        <button class="btn" id="btn-briefing" title="Météo, agenda, e-mails et tâches en quelques phrases">Faire le point</button>
+        <button class="btn quiet" id="btn-reset" title="Range cette conversation dans la mémoire et repart à zéro">Nouvelle conversation</button>
+        <button class="icon-btn" id="btn-palette" title="Commandes (Ctrl+K)" aria-label="Ouvrir les commandes">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9.5 3a6.5 6.5 0 0 1 5.16 10.45l5.2 5.2-1.42 1.42-5.2-5.2A6.5 6.5 0 1 1 9.5 3Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
+        </button>
       </div>
-      <div class="state-label" id="state-label">En veille</div>
-      <div class="hint small muted" id="hint"></div>
     </div>
 
-    <div class="chat card" id="chat">
-      <div class="chat-empty muted" id="chat-empty">Parle-moi, ou écris ci-dessous.</div>
+    <section class="presence" id="presence">
+      <canvas id="orb" width="560" height="560" aria-hidden="true"></canvas>
+      <p class="caption" id="caption" aria-live="polite"></p>
+      <p class="hint" id="hint"></p>
+    </section>
+
+    <div class="thread" id="thread" role="log" aria-live="polite">
+      <div class="empty" id="empty">
+        <p class="empty-title" id="empty-title">Que puis-je faire pour toi ?</p>
+        <p class="empty-sub">Quelques idées pour commencer :</p>
+        <div class="suggestions" id="suggestions"></div>
+      </div>
     </div>
 
     <form class="composer" id="composer" autocomplete="off">
-      <button type="button" class="icon-btn" id="btn-mic" title="Parler (appuyer pour parler)" aria-label="Parler">
-        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
+      <button type="button" class="talk" id="btn-talk" title="Parler (Espace)" aria-label="Parler">
+        <span class="talk-ring" id="talk-ring"></span>
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
       </button>
-      <input id="input" placeholder="Demande quelque chose à Jarvis…" maxlength="4000">
-      <button type="button" class="icon-btn" id="btn-stop" title="Interrompre" aria-label="Interrompre">
-        <svg viewBox="0 0 24 24" width="18" height="18"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+      <input id="input" placeholder="Écris une demande…" maxlength="4000" aria-label="Ta demande">
+      <button type="button" class="icon-btn stop" id="btn-stop" title="Interrompre (Échap)" aria-label="Interrompre" hidden>
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/></svg>
       </button>
-      <button type="submit" class="btn">Envoyer</button>
+      <button type="submit" class="send" id="btn-send" aria-label="Envoyer">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg>
+      </button>
     </form>
-  </section>
+  </main>
 
-  <!-- Colonne droite : onglets -->
-  <section class="col right">
+  <!-- Panneaux de gestion -->
+  <aside class="side" aria-label="Panneaux">
     <nav class="tabs" role="tablist">
-      <button class="tab active" data-tab="today" role="tab">Aujourd'hui</button>
-      <button class="tab" data-tab="memory" role="tab">Mémoire</button>
-      <button class="tab" data-tab="tasks" role="tab">Tâches</button>
-      <button class="tab" data-tab="activity" role="tab">Activité</button>
+      <button class="tab active" data-tab="memory" role="tab" aria-selected="true">Mémoire</button>
+      <button class="tab" data-tab="tasks" role="tab" aria-selected="false">Tâches</button>
+      <button class="tab" data-tab="activity" role="tab" aria-selected="false">Activité</button>
+      <button class="tab" data-tab="system" role="tab" aria-selected="false">Système</button>
     </nav>
 
-    <div class="tab-panel" id="tab-today">
-      <article class="card">
-        <h2>Agenda <button class="mini" id="btn-refresh" title="Actualiser">↻</button></h2>
-        <ul id="events" class="list"><li class="muted small">Connecte Google : python -m jarvis --setup-google</li></ul>
-      </article>
-      <article class="card">
-        <h2>E-mails non lus</h2>
-        <ul id="emails" class="list"><li class="muted small">Gmail non connecté.</li></ul>
-      </article>
-    </div>
+    <section class="panel" id="tab-memory">
+      <div class="panel-head">
+        <h2>Ce que je sais de toi</h2>
+        <span class="count" id="facts-count"></span>
+      </div>
+      <input class="field" id="memory-search" placeholder="Chercher un souvenir…" aria-label="Chercher un souvenir">
+      <div class="facts" id="facts"></div>
+      <form class="add-row" id="fact-form">
+        <input class="field" id="fact-input" placeholder="Apprends-moi quelque chose sur toi…" maxlength="500" aria-label="Nouveau souvenir">
+        <select class="field" id="fact-importance" title="Importance" aria-label="Importance">
+          <option value="1">Détail</option><option value="2" selected>Utile</option><option value="3">Essentiel</option>
+        </select>
+        <button class="btn small">Ajouter</button>
+      </form>
+      <div class="panel-head spaced"><h2>Nos conversations</h2></div>
+      <ol class="episodes" id="episodes"></ol>
+    </section>
 
-    <div class="tab-panel" id="tab-memory" hidden>
-      <article class="card">
-        <h2>Ce que Jarvis sait de toi <span class="count" id="facts-count"></span></h2>
-        <input class="search" id="memory-search" placeholder="Rechercher dans la mémoire…">
-        <div id="facts" class="facts"></div>
-        <form class="add-row" id="fact-form">
-          <input id="fact-input" placeholder="Ajouter un souvenir…" maxlength="500">
-          <select id="fact-importance" title="Importance">
-            <option value="1">Détail</option><option value="2" selected>Utile</option><option value="3">Essentiel</option>
-          </select>
-          <button class="btn small">Ajouter</button>
-        </form>
-      </article>
-      <article class="card">
-        <h2>Conversations passées</h2>
-        <ul id="episodes" class="list"></ul>
-      </article>
-    </div>
+    <section class="panel" id="tab-tasks" hidden>
+      <div class="panel-head"><h2>Tâches</h2><span class="count" id="tasks-count"></span></div>
+      <form class="add-row" id="task-form">
+        <input class="field" id="task-input" placeholder="Nouvelle tâche…" maxlength="300" aria-label="Nouvelle tâche">
+        <input class="field date-field" id="task-due" type="date" title="Échéance" aria-label="Échéance">
+        <button class="btn small">Ajouter</button>
+      </form>
+      <ul class="tasks" id="tasks"></ul>
+    </section>
 
-    <div class="tab-panel" id="tab-tasks" hidden>
-      <article class="card">
-        <h2>Tâches</h2>
-        <form class="add-row" id="task-form">
-          <input id="task-input" placeholder="Nouvelle tâche…" maxlength="300">
-          <input id="task-due" type="date" title="Échéance">
-          <button class="btn small">Ajouter</button>
-        </form>
-        <ul id="tasks" class="list"></ul>
-      </article>
-    </div>
+    <section class="panel" id="tab-activity" hidden>
+      <div class="panel-head"><h2>Ce que j'ai fait</h2></div>
+      <ol class="activity" id="activity"></ol>
+    </section>
 
-    <div class="tab-panel" id="tab-activity" hidden>
-      <article class="card">
-        <h2>Actions de Jarvis</h2>
-        <ul id="activity" class="list activity"></ul>
-      </article>
-    </div>
-  </section>
-</main>
+    <section class="panel" id="tab-system" hidden>
+      <div class="panel-head"><h2>Ordinateur</h2></div>
+      <div class="gauges" id="gauges">
+        <div class="gauge"><canvas width="96" height="96" id="gauge-cpu"></canvas><span>Processeur</span></div>
+        <div class="gauge"><canvas width="96" height="96" id="gauge-ram"></canvas><span>Mémoire</span></div>
+        <div class="gauge"><canvas width="96" height="96" id="gauge-disk"></canvas><span>Disque</span></div>
+        <div class="gauge" id="gauge-bat-wrap" hidden><canvas width="96" height="96" id="gauge-bat"></canvas><span>Batterie</span></div>
+      </div>
+      <p class="muted small" id="sys-info"></p>
+      <div class="panel-head spaced"><h2>Cerveau</h2></div>
+      <dl class="kv">
+        <dt>Modèle</dt><dd id="k-model">–</dd>
+        <dt>Connexion</dt><dd id="k-brain">–</dd>
+        <dt>Réflexion</dt><dd id="k-effort">–</dd>
+        <dt>Voix</dt><dd id="k-voice">–</dd>
+        <dt>Contexte</dt><dd><span class="meter"><i id="m-ctx"></i></span> <span id="v-ctx"></span></dd>
+      </dl>
+    </section>
+  </aside>
+</div>
 
-<div class="modal" id="confirm" hidden>
-  <div class="modal-box" role="alertdialog" aria-labelledby="confirm-title">
-    <div class="modal-kicker">Autorisation requise</div>
-    <h3 id="confirm-title">Jarvis demande ton accord</h3>
+<!-- Palette de commandes -->
+<div class="overlay" id="palette" hidden>
+  <div class="palette" role="dialog" aria-modal="true" aria-label="Commandes">
+    <input class="palette-input" id="palette-input" placeholder="Une commande, ou une question…" aria-label="Commande">
+    <ul class="palette-list" id="palette-list" role="listbox"></ul>
+    <p class="palette-foot"><kbd>↑</kbd><kbd>↓</kbd> choisir · <kbd>Entrée</kbd> lancer · <kbd>Échap</kbd> fermer</p>
+  </div>
+</div>
+
+<!-- Autorisation d'une action sensible -->
+<div class="overlay" id="confirm" hidden>
+  <div class="confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-action">
+    <svg class="countdown" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="19"/><circle id="countdown-arc" cx="22" cy="22" r="19"/></svg>
+    <p class="confirm-kicker">Autorisation</p>
+    <h3 id="confirm-title">J'ai besoin de ton accord</h3>
     <p id="confirm-action"></p>
-    <div class="modal-actions">
-      <button class="btn ghost" id="confirm-no">Refuser</button>
+    <div class="confirm-actions">
+      <button class="btn quiet" id="confirm-no">Refuser</button>
       <button class="btn" id="confirm-yes">Autoriser</button>
     </div>
   </div>
 </div>
 
-<div class="toasts" id="toasts"></div>
-<div class="lock" id="lock" hidden>
-  <div class="modal-box">
-    <h3>Accès refusé</h3>
-    <p>Ouvre le centre de commande depuis le lien affiché dans le terminal au lancement de Jarvis.</p>
+<!-- Raccourcis -->
+<div class="overlay" id="help" hidden>
+  <div class="help" role="dialog" aria-modal="true" aria-label="Raccourcis clavier">
+    <h3>Raccourcis</h3>
+    <dl>
+      <dt><kbd>Espace</kbd></dt><dd>Parler</dd>
+      <dt><kbd>Échap</kbd></dt><dd>Interrompre / fermer</dd>
+      <dt><kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Commandes</dd>
+      <dt><kbd>/</kbd></dt><dd>Écrire une demande</dd>
+      <dt><kbd>F</kbd></dt><dd>Mode concentration</dd>
+      <dt><kbd>?</kbd></dt><dd>Cette aide</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="overlay lock" id="lock" hidden>
+  <div class="help">
+    <h3>Accès protégé</h3>
+    <p>Ouvre le centre de commande avec le lien affiché dans la fenêtre de l'assistant au démarrage.</p>
   </div>
 </div>
 <script src="app.js"></script>

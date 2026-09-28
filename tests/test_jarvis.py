@@ -360,7 +360,7 @@ def test_dashboard_api(config, memory):
 
     try:
         with urllib.request.urlopen(base + "/", timeout=5) as res:
-            assert b"J.A.R.V.I.S." in res.read()
+            assert b"Centre de commande" in res.read()
         assert call("GET", "/api/state", token="mauvais")[0] == 401
         status, state = call("GET", "/api/state")
         assert status == 200 and state["user"] == "Yannis" and state["voice_enabled"] is False
@@ -528,7 +528,7 @@ def test_subscription_brain_streams_and_uses_subscription(sub_brain, memory):
     assert "".join(deltas) == reply
     assert "ANTHROPIC_API_KEY" not in os.environ  # sinon Claude Code facturerait l'API
     opts = sdk.options[0]
-    assert "JARVIS" in opts.system_prompt and "guitare" in opts.system_prompt
+    assert "Tu es Jarvis" in opts.system_prompt and "guitare" in opts.system_prompt
     assert "mcp__jarvis__remember" in opts.allowed_tools and "WebSearch" in opts.allowed_tools
     assert opts.tools == ["WebSearch", "WebFetch"] and opts.setting_sources == []
     assert opts.include_partial_messages and opts.model == "claude-opus-5"
@@ -592,3 +592,53 @@ def test_api_brain_interrupt_rolls_back(config, memory):
     with pytest.raises(Interrupted):
         brain.ask("Raconte", on_delta=lambda d: brain.interrupt())
     assert brain.messages == [] and brain.turns == 0
+
+
+# ---------------------------------------------------------------- activation par le prénom
+
+def test_name_spotter_natural_phrases():
+    from jarvis.voice.wakename import NameSpotter
+
+    spot = NameSpotter("Jarvis")
+    assert spot.find("Jarvis, mets de la musique.") == (True, "mets de la musique")
+    assert spot.find("Il fait quel temps demain Jarvis ?") == (True, "Il fait quel temps demain")
+    assert spot.find("Dis Jarvis, tu peux baisser le son ?") == (True, "tu peux baisser le son")
+    assert spot.find("Jarvisse, ouvre Spotify") == (True, "ouvre Spotify")  # erreur de transcription
+    assert spot.find("Jarvis ?") == (True, "")
+    # Le nom au milieu d'une phrase qui ne s'adresse pas à lui ne le réveille pas.
+    assert spot.find("J'ai revu le film avec Jarvis dans Iron Man hier soir, c'était bien")[0] is False
+    assert spot.find("le service est fermé")[0] is False
+    assert NameSpotter("Nova").find("Nova, lance un minuteur") == (True, "lance un minuteur")
+    assert NameSpotter("Tony Stark").find("Tony Stark, allume la lumière") == (True, "allume la lumière")
+
+
+def test_voice_loop_submits_command_said_with_name(config, memory):
+    import numpy as np
+
+    from jarvis.voice.loop import VoiceLoop
+
+    class Listener:
+        has_wake_word = False
+        wake_threshold = 0.5
+        level = 0.0
+
+        def __init__(self):
+            self.heard = ["on regarde un film ce soir", "Jarvis, mets du rap"]
+
+        def record_utterance(self, start_timeout, max_seconds):
+            return np.zeros(16000, dtype=np.int16)
+
+        def transcribe(self, audio, fast=False):
+            return self.heard[0]
+
+        def flush(self):
+            pass
+
+    core = Core(config, memory=memory, client=FakeClient())
+    submitted = []
+    core.submit = lambda text, source="text": submitted.append((text, source))
+    loop = VoiceLoop(core, Listener())
+    assert loop._called() == (False, "")  # conversation sans son nom : ignorée
+    loop.listener.heard.pop(0)
+    assert loop._called() == (True, "mets du rap")
+    assert "par mon nom" in loop.activation_hint

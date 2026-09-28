@@ -4,37 +4,42 @@
 const TOKEN = (() => {
   const fromHash = new URLSearchParams(location.hash.slice(1)).get("token");
   if (fromHash) {
-    try { sessionStorage.setItem("jarvis-token", fromHash); } catch (_) {}
+    try { sessionStorage.setItem("assistant-token", fromHash); } catch (_) {}
     history.replaceState(null, "", location.pathname);
     return fromHash;
   }
-  try { return sessionStorage.getItem("jarvis-token") || ""; } catch (_) { return ""; }
+  try { return sessionStorage.getItem("assistant-token") || ""; } catch (_) { return ""; }
 })();
 
 const $ = (id) => document.getElementById(id);
-const STATE_LABELS = { idle: "En veille", listening: "J'écoute", thinking: "Réflexion", speaking: "Je parle" };
+const STATE_LABELS = { idle: "En veille", listening: "J'écoute", thinking: "Je réfléchis", speaking: "Je parle" };
 const TOOL_LABELS = {
-  remember: "Mémorisation", recall: "Recherche en mémoire", update_memory: "Mise à jour de la mémoire",
-  forget: "Oubli", search_conversations: "Recherche dans les conversations", add_task: "Nouvelle tâche",
-  list_tasks: "Lecture des tâches", complete_task: "Tâche terminée", open_application: "Ouverture d'application",
-  open_url: "Ouverture de page", play_media: "Lecture média", media_control: "Contrôle média",
-  system_status: "État du système", list_processes: "Processus", look_at_screen: "Analyse de l'écran",
-  read_clipboard: "Lecture du presse-papiers", write_clipboard: "Copie", set_timer: "Minuteur",
-  list_timers: "Minuteurs", cancel_timer: "Annulation du minuteur", run_command: "Commande système",
-  list_directory: "Lecture du dossier", search_files: "Recherche de fichiers", read_text_file: "Lecture de fichier",
-  write_text_file: "Écriture de fichier", open_path: "Ouverture", get_weather: "Météo",
-  gmail_list: "Lecture des e-mails", gmail_read: "Lecture d'un e-mail", gmail_send: "Envoi d'e-mail",
-  calendar_list: "Lecture de l'agenda", calendar_create: "Création d'événement", calendar_delete: "Suppression d'événement",
+  remember: "Je retiens", recall: "Je cherche dans ma mémoire", update_memory: "Je corrige ma mémoire",
+  forget: "J'oublie", search_conversations: "Je relis nos conversations", add_task: "Tâche ajoutée",
+  list_tasks: "Tes tâches", complete_task: "Tâche terminée", open_application: "J'ouvre l'application",
+  open_url: "J'ouvre la page", play_media: "Je lance la lecture", media_control: "Contrôle de la lecture",
+  system_status: "État de l'ordinateur", list_processes: "Programmes actifs", look_at_screen: "Je regarde ton écran",
+  read_clipboard: "Presse-papiers", write_clipboard: "Copié", set_timer: "Minuteur réglé",
+  list_timers: "Minuteurs", cancel_timer: "Minuteur annulé", run_command: "Commande système",
+  list_directory: "Je parcours le dossier", search_files: "Je cherche tes fichiers", read_text_file: "Je lis le fichier",
+  write_text_file: "J'écris le fichier", open_path: "J'ouvre", get_weather: "Météo",
+  gmail_list: "Je regarde tes e-mails", gmail_read: "Je lis l'e-mail", gmail_send: "J'envoie l'e-mail",
+  calendar_list: "Je regarde ton agenda", calendar_create: "J'ajoute à l'agenda", calendar_delete: "Je retire de l'agenda",
 };
+const SUGGESTIONS = [
+  "Fais-moi le point sur ma journée",
+  "Mets-moi de la musique pour me concentrer",
+  "Qu'est-ce qui ralentit mon PC ?",
+  "Rappelle-moi de faire une pause dans 45 minutes",
+  "Qu'est-ce que tu sais de moi ?",
+  "Ajoute « réviser » à ma liste pour demain",
+];
 
 let info = {};
-let liveBubble = null;
-let liveTurn = null;
-const streamedTurns = new Set();  // tours dont le texte est déjà affiché au fil de l'eau
 let currentConfirm = null;
-const toolChips = new Map();
+const timerTotals = new Map();
 
-// ------------------------------------------------------------------ API
+// ------------------------------------------------------------------ utilitaires
 
 async function api(method, path, body) {
   const res = await fetch(path, {
@@ -42,7 +47,7 @@ async function api(method, path, body) {
     headers: { "X-Jarvis-Token": TOKEN, ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (res.status === 401) { $("lock").hidden = false; throw new Error("unauthorized"); }
+  if (res.status === 401) { $("lock").hidden = false; throw new Error("Accès refusé"); }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
@@ -63,63 +68,258 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-function toast(text) {
-  const t = el("div", { class: "toast" }, text);
+function toast(text, kind = "") {
+  const t = el("div", { class: `toast ${kind}` }, el("div", {}, text));
   $("toasts").append(t);
-  setTimeout(() => t.remove(), 7000);
+  setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 300); }, 6500);
 }
 
-// ------------------------------------------------------------------ horloge
+const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const time = (d) => d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function tickClock() {
-  const now = new Date();
-  $("clock-time").textContent = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  $("clock-date").textContent = now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-}
+// ------------------------------------------------------------------ la présence (animation)
 
-// ------------------------------------------------------------------ état
+const Orb = (() => {
+  const canvas = $("orb");
+  const ctx = canvas.getContext("2d");
+  const css = getComputedStyle(document.documentElement);
+  const hex = (name) => {
+    const v = css.getPropertyValue(name).trim().replace("#", "");
+    return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16));
+  };
+  const colors = { idle: hex("--accent"), listening: hex("--listen"), thinking: hex("--think"), speaking: hex("--speak") };
+  let state = "idle";
+  let color = colors.idle.slice();
+  let mic = 0, out = 0, energy = 0.02, spin = 0, t = 0;
+  const phases = Array.from({ length: 3 }, () => Array.from({ length: 4 }, () => Math.random() * Math.PI * 2));
+  const ripples = [];
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const size = canvas.clientWidth || 230;
+    canvas.width = canvas.height = Math.round(size * dpr);
+  }
+
+  function draw() {
+    requestAnimationFrame(draw);
+    if (document.hidden) return;
+    const w = canvas.width, c = w / 2, R = w * 0.27;
+    const speed = reducedMotion ? 0.25 : 1;
+    t += 0.016 * speed;
+    // L'énergie suit l'état et le son : la voix de l'assistant, ou la tienne quand il écoute.
+    const target = state === "speaking" ? 0.035 + out * 0.2
+      : state === "listening" ? 0.04 + mic * 0.16
+      : state === "thinking" ? 0.06 : 0.018 + 0.008 * Math.sin(t * 1.3);
+    energy += (target - energy) * 0.18;
+    spin += (state === "thinking" ? 0.035 : 0.004) * speed;
+    const goal = colors[state] || colors.idle;
+    color = color.map((v, i) => v + (goal[i] - v) * 0.06);
+    const rgb = (a) => `rgba(${color.map(Math.round).join(",")},${a})`;
+
+    ctx.clearRect(0, 0, w, w);
+    ctx.globalCompositeOperation = "lighter";
+
+    // Halo
+    const halo = ctx.createRadialGradient(c, c, R * 0.2, c, c, R * 1.7);
+    halo.addColorStop(0, rgb(0.22 + energy));
+    halo.addColorStop(0.55, rgb(0.05));
+    halo.addColorStop(1, rgb(0));
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, w, w);
+
+    // Contours vivants
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      const steps = 160;
+      for (let i = 0; i <= steps; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        const p = phases[k];
+        const wobble = Math.sin(a * 2 + t * 0.9 + p[0]) * 0.5 + Math.sin(a * 3 - t * 1.3 + p[1]) * 0.3
+          + Math.sin(a * 5 + t * 2.1 + p[2]) * 0.2 + Math.sin(a * 7 - t * 2.9 + p[3]) * 0.12;
+        const r = R * (1 + k * 0.07) + R * energy * 1.6 * wobble;
+        const x = c + Math.cos(a + spin * (k + 1) * 0.6) * r;
+        const y = c + Math.sin(a + spin * (k + 1) * 0.6) * r;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.lineWidth = w * (0.006 - k * 0.0014);
+      ctx.strokeStyle = rgb(0.75 - k * 0.22);
+      ctx.shadowColor = rgb(0.8);
+      ctx.shadowBlur = w * 0.03;
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+
+    // Cœur
+    const coreR = R * (0.52 + energy * 1.2);
+    const core = ctx.createRadialGradient(c, c, 0, c, c, coreR);
+    core.addColorStop(0, "rgba(255,255,255,0.55)");
+    core.addColorStop(0.35, rgb(0.35));
+    core.addColorStop(1, rgb(0));
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(c, c, coreR, 0, Math.PI * 2); ctx.fill();
+
+    // Réflexion : des particules en orbite
+    if (state === "thinking") {
+      for (let i = 0; i < 9; i++) {
+        const a = spin * 3 + (i / 9) * Math.PI * 2;
+        const r = R * (1.28 + 0.06 * Math.sin(t * 3 + i));
+        ctx.fillStyle = rgb(0.9 - (i % 3) * 0.25);
+        ctx.beginPath(); ctx.arc(c + Math.cos(a) * r, c + Math.sin(a) * r, w * 0.007, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // Écoute : des ondes qui partent vers l'extérieur
+    if (state === "listening" && !reducedMotion && (ripples.length === 0 || t - ripples[ripples.length - 1] > 0.9)) ripples.push(t);
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const age = t - ripples[i];
+      if (age > 2.2) { ripples.splice(i, 1); continue; }
+      ctx.strokeStyle = rgb(0.45 * (1 - age / 2.2));
+      ctx.lineWidth = w * 0.004;
+      ctx.beginPath(); ctx.arc(c, c, R * (1.05 + age * 0.35), 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  addEventListener("resize", resize);
+  new ResizeObserver(resize).observe(canvas);
+  resize();
+  requestAnimationFrame(draw);
+  return {
+    set state(s) { state = s; },
+    levels(m, o) { mic = m; out = o; },
+  };
+})();
+
+// ------------------------------------------------------------------ état général
 
 function setState(state) {
-  $("reactor").dataset.state = state;
+  Orb.state = state;
+  const pill = $("state-pill");
+  pill.dataset.state = state;
   $("state-label").textContent = STATE_LABELS[state] || state;
-  $("btn-mic").classList.toggle("live", state === "listening");
+  $("btn-talk").classList.toggle("live", state === "listening");
+  $("btn-stop").hidden = !(state === "thinking" || state === "speaking");
+  if (state === "idle") setTimeout(() => { if (Orb && $("state-pill").dataset.state === "idle") fadeCaption(); }, 2500);
 }
 
 function renderInfo() {
-  $("k-model").textContent = info.model ? `${info.model} · ${info.brain}` : "–";
-  $("k-effort").textContent = info.effort || "–";
-  $("k-voice").textContent = !info.voice_enabled ? "désactivée"
-    : info.tts === "ElevenLabs" ? "ElevenLabs" : (info.voice || "–").replace(/Neural$/, "");
-  const s = info.stats || {};
-  $("k-memory").textContent = `${s.facts ?? 0} faits · ${s.episodes ?? 0} conversations`;
-  $("btn-mic").disabled = !info.voice_enabled;
-  $("hint").textContent = info.voice_enabled
-    ? (info.wake_word ? "Dis « Hey Jarvis » ou clique sur le micro" : "Clique sur le micro pour parler")
-    : "Mode texte";
-  $("subtitle").textContent = `Au service de ${info.user || ""}`;
+  const name = info.name || "Assistant";
+  $("name").textContent = name;
+  document.title = `${name} · Centre de commande`;
+  $("hint").textContent = info.hint || "";
+  $("btn-talk").disabled = !info.voice_enabled;
+  $("input").placeholder = `Écris une demande à ${name}…`;
+  $("k-model").textContent = info.model || "–";
+  $("k-brain").textContent = info.brain || "–";
+  $("k-effort").textContent = { low: "rapide", medium: "équilibrée", high: "approfondie", xhigh: "très approfondie", max: "maximale" }[info.effort] || info.effort || "–";
+  $("k-voice").textContent = !info.voice_enabled ? "désactivée" : info.tts === "ElevenLabs" ? "ElevenLabs" : (info.voice || "–").replace(/Neural$/, "");
   const pct = info.max_context_tokens ? Math.min(100, (100 * (info.context_tokens || 0)) / info.max_context_tokens) : 0;
   $("m-ctx").style.width = `${pct}%`;
-  $("v-ctx").textContent = `Conversation : ${info.session_turns || 0} échanges · contexte ${Math.round(pct)}%`;
+  $("v-ctx").textContent = `${info.session_turns || 0} échanges`;
+}
+
+async function refreshState() {
+  try { info = await api("GET", "/api/state"); renderInfo(); return info; } catch (_) { return null; }
+}
+
+// ------------------------------------------------------------------ sous-titres
+
+let captionTimer = null;
+function showCaption(text) {
+  clearTimeout(captionTimer);
+  const cap = $("caption");
+  cap.classList.remove("fading");
+  cap.textContent = text;
+}
+function fadeCaption() {
+  const cap = $("caption");
+  cap.classList.add("fading");
+  captionTimer = setTimeout(() => { cap.textContent = ""; cap.classList.remove("fading"); }, 320);
 }
 
 // ------------------------------------------------------------------ conversation
 
-function scrollChat() {
-  const chat = $("chat");
-  chat.scrollTop = chat.scrollHeight;
+const Thread = (() => {
+  let turn = null;          // bloc du tour en cours
+  let live = null;          // texte de l'assistant en train de s'écrire
+  const streamed = new Set();
+  const actions = new Map();
+
+  function scroll() { const th = $("thread"); th.scrollTop = th.scrollHeight; }
+  function begin() {
+    $("empty").hidden = true;
+    document.querySelector(".stage").classList.add("compact");
+    turn = el("div", { class: "turn" });
+    $("thread").append(turn);
+    live = null;
+    return turn;
+  }
+  function closeLive() { if (live) { live.classList.remove("live"); live = null; } }
+
+  return {
+    user(text, source) {
+      begin();
+      turn.append(el("div", { class: "msg-user" }, source === "voice" ? el("span", { class: "via" }, "à la voix") : null, text));
+      scroll();
+    },
+    delta(id, text) {
+      if (!turn) begin();
+      if (!live) { live = el("div", { class: "msg-ai live" }); turn.append(live); }
+      streamed.add(id);
+      live.textContent += text;
+      scroll();
+    },
+    final(id, text) {
+      closeLive();
+      if (text && !streamed.has(id)) {
+        if (!turn && !$("empty").hidden && id === undefined) {
+          // Message d'accueil : il devient le titre de l'écran d'accueil, avec les suggestions.
+          $("empty-title").textContent = text;
+          return;
+        }
+        if (!turn) begin();
+        turn.append(el("div", { class: "msg-ai" }, text));
+      }
+      turn = null;
+      scroll();
+    },
+    note(text, kind = "") {
+      begin();
+      turn.append(el("div", { class: `msg-note ${kind}` }, text));
+      turn = null;
+      scroll();
+    },
+    toolStart(d) {
+      if (!turn) begin();
+      closeLive();
+      let row = turn.lastElementChild;
+      if (!row || !row.classList.contains("actions")) { row = el("div", { class: "actions" }); turn.append(row); }
+      const pill = el("span", { class: "action", title: "" }, el("i", { class: "ic" }), TOOL_LABELS[d.name] || d.name);
+      actions.set(d.id, pill);
+      row.append(pill);
+      scroll();
+    },
+    toolEnd(d) {
+      const pill = actions.get(d.id);
+      if (!pill) return;
+      pill.classList.add(d.ok ? "ok" : "fail");
+      pill.title = d.summary || "";
+    },
+  };
+})();
+
+function renderSuggestions() {
+  $("suggestions").replaceChildren(...SUGGESTIONS.map((s) => el("button", { class: "chip", type: "button", onclick: () => ask(s) }, s)));
 }
 
-function addMessage(kind, text, meta) {
-  $("chat-empty").hidden = true;
-  const node = el("div", { class: `msg ${kind}` }, meta ? el("span", { class: "meta" }, meta) : null, text);
-  $("chat").append(node);
-  scrollChat();
-  return node;
+async function ask(text) {
+  await api("POST", "/api/ask", { text }).catch((e) => toast(e.message, "error"));
 }
+
+// ------------------------------------------------------------------ événements en direct
 
 function addActivity(text, detail) {
-  const li = el("li", {}, el("b", {}, new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })), " ", text,
-    detail ? el("div", {}, detail) : null);
+  const li = el("li", {}, el("span", { class: "t" }, time(new Date())), el("span", {}, text), detail ? el("span", { class: "d" }, detail) : null);
   $("activity").prepend(li);
   while ($("activity").children.length > 150) $("activity").lastChild.remove();
 }
@@ -128,144 +328,166 @@ function handleEvent(ev, replay = false) {
   const d = ev.data || {};
   switch (ev.type) {
     case "state": setState(d.state); break;
-    case "user_message":
-      addMessage("user", d.text, d.source === "voice" ? "🎙 voix" : null);
+    case "levels":
+      Orb.levels(d.mic || 0, d.out || 0);
+      $("talk-ring").style.setProperty("--lvl", String(1 + (d.mic || 0) * 0.5));
       break;
-    case "assistant_delta":
-      if (!liveBubble || liveTurn !== d.turn) {
-        liveBubble = addMessage("jarvis live", "");
-        liveTurn = d.turn;
-        streamedTurns.add(d.turn);
-      }
-      liveBubble.textContent += d.text;
-      scrollChat();
-      break;
+    case "caption": showCaption(d.text); break;
+    case "user_message": Thread.user(d.text, d.source); break;
+    case "assistant_delta": Thread.delta(d.turn, d.text); break;
     case "assistant_message":
-      if (liveBubble) {
-        liveBubble.classList.remove("live");
-        liveBubble = null;
-        liveTurn = null;
-      }
-      if (d.text && !streamedTurns.has(d.turn)) addMessage("jarvis", d.text);
+      Thread.final(d.turn, d.text);
       if (!replay) refreshState();
       break;
-    case "tool_start": {
-      const chip = el("div", { class: "chip" }, `⚙ ${TOOL_LABELS[d.name] || d.name}…`);
-      toolChips.set(d.id, chip);
-      // La bulle en cours est close : le texte qui suit l'outil ira dans une nouvelle bulle.
-      if (liveBubble) { liveBubble.classList.remove("live"); liveBubble = null; }
-      $("chat-empty").hidden = true;
-      $("chat").append(chip);
-      scrollChat();
+    case "tool_start":
+      Thread.toolStart(d);
       if (!replay) addActivity(TOOL_LABELS[d.name] || d.name, JSON.stringify(d.args));
       break;
-    }
-    case "tool_end": {
-      const chip = toolChips.get(d.id);
-      if (chip) {
-        chip.classList.add(d.ok ? "ok" : "fail");
-        chip.textContent = `${d.ok ? "✓" : "✗"} ${TOOL_LABELS[d.name] || d.name}`;
-        chip.title = d.summary || "";
-      }
-      if (!replay) addActivity(`${d.ok ? "✓" : "✗"} ${d.name}`, (d.summary || "").slice(0, 300));
+    case "tool_end":
+      Thread.toolEnd(d);
+      if (!replay) addActivity(`${d.ok ? "Réussi" : "Échec"} : ${TOOL_LABELS[d.name] || d.name}`, (d.summary || "").slice(0, 240));
       break;
-    }
     case "notification":
-      addMessage("note", d.text, "rappel");
-      if (!replay) toast(d.text);
+      Thread.note(d.text, "alert");
+      if (!replay) toast(d.text, "alert");
       break;
     case "error":
-      addMessage("err", d.message);
+      Thread.note(d.message, "error");
+      if (!replay) toast(d.message, "error");
       break;
     case "consolidating":
       $("hint").textContent = "Je range cette conversation dans ma mémoire…";
       break;
     case "consolidated":
-      addMessage("note", `Conversation mémorisée : ${d.summary}`, "mémoire");
-      if (!replay) { refreshState(); loadMemory(); }
+      Thread.note(`Conversation mémorisée : ${d.summary}`);
+      if (!replay) { toast("Conversation rangée dans ma mémoire."); refreshState().then(() => renderInfo()); loadMemory(); }
       break;
-    case "confirm_request":
-      if (!replay) openConfirm(d);
-      break;
+    case "confirm_request": if (!replay) openConfirm(d); break;
     case "confirm_resolved":
-      if (currentConfirm && currentConfirm.id === d.id) closeConfirm();
+      if (currentConfirm && currentConfirm.id === d.id) closeOverlay("confirm");
       if (!replay) addActivity(d.approved ? "Action autorisée" : "Action refusée");
       break;
-    case "memory_changed":
-      if (!replay) { loadMemory(); refreshState(); }
-      break;
-    case "wake":
-      $("hint").textContent = "Je t'écoute…";
-      break;
-    case "stopped":
-      addActivity("Parole interrompue");
-      break;
-    case "barge_in":
-      $("hint").textContent = "Je t'écoute…";
-      addActivity("Interrompu à la voix");
-      break;
+    case "memory_changed": if (!replay) { loadMemory(); refreshState(); } break;
+    case "wake": $("hint").textContent = "Je t'écoute…"; break;
+    case "barge_in": addActivity("Interrompu à la voix"); break;
+    case "stopped": fadeCaption(); addActivity("Réponse interrompue"); break;
   }
 }
 
 function connectEvents() {
   const source = new EventSource(`/api/events?token=${encodeURIComponent(TOKEN)}`);
-  source.onopen = () => { $("link-dot").classList.add("on"); $("reactor").classList.remove("offline"); };
+  let wasDown = false;
+  source.onopen = () => {
+    $("offline").hidden = true;
+    if (wasDown) { refreshState(); loadMemory(); }
+    wasDown = false;
+  };
   source.onmessage = (msg) => handleEvent(JSON.parse(msg.data));
-  source.onerror = () => { $("link-dot").classList.remove("on"); $("reactor").classList.add("offline"); };
+  source.onerror = () => { $("offline").hidden = false; wasDown = true; };
 }
 
-// ------------------------------------------------------------------ confirmations
+// ------------------------------------------------------------------ fenêtres
+
+function openOverlay(id) { $(id).hidden = false; }
+function closeOverlay(id) {
+  $(id).hidden = true;
+  if (id === "confirm") { currentConfirm = null; document.querySelector(".countdown").classList.remove("run"); }
+}
+const anyOverlay = () => ["palette", "confirm", "help"].find((id) => !$(id).hidden);
 
 function openConfirm(d) {
   currentConfirm = d;
-  $("confirm-action").textContent = `Jarvis veut ${d.action}.`;
-  $("confirm").hidden = false;
+  $("confirm-action").textContent = `${info.name || "L'assistant"} veut ${d.action}.`;
+  openOverlay("confirm");
+  const ring = document.querySelector(".countdown");
+  ring.classList.remove("run");
+  void ring.getBoundingClientRect();
+  ring.classList.add("run");  // 60 s, comme le délai d'attente de l'assistant
   $("confirm-yes").focus();
 }
-function closeConfirm() { currentConfirm = null; $("confirm").hidden = true; }
 async function answerConfirm(approved) {
   if (!currentConfirm) return;
   const id = currentConfirm.id;
-  closeConfirm();
-  await api("POST", `/api/confirm/${id}`, { approved }).catch((e) => toast(e.message));
+  closeOverlay("confirm");
+  await api("POST", `/api/confirm/${id}`, { approved }).catch((e) => toast(e.message, "error"));
 }
 
-// ------------------------------------------------------------------ système
+// ------------------------------------------------------------------ palette de commandes
 
-function meter(id, value) {
-  const bar = $(`m-${id}`);
-  bar.style.width = `${Math.max(0, Math.min(100, value))}%`;
-  bar.classList.toggle("high", value >= 85);
-  $(`v-${id}`).textContent = `${Math.round(value)}%`;
+const COMMANDS = [
+  { label: "Faire le point", hint: "Météo, agenda, e-mails, tâches", run: () => api("POST", "/api/briefing") },
+  { label: "Parler", hint: "Espace", run: () => talk() },
+  { label: "Interrompre", hint: "Échap", run: () => api("POST", "/api/stop") },
+  { label: "Nouvelle conversation", hint: "Range celle-ci dans la mémoire", run: () => api("POST", "/api/reset") },
+  { label: "Mode concentration", hint: "F", run: () => toggleFocus() },
+  { label: "Ouvrir la mémoire", hint: "Panneau", run: () => showTab("memory") },
+  { label: "Ouvrir les tâches", hint: "Panneau", run: () => showTab("tasks") },
+  { label: "Voir l'activité", hint: "Panneau", run: () => showTab("activity") },
+  { label: "État de l'ordinateur", hint: "Panneau", run: () => showTab("system") },
+  { label: "Actualiser l'agenda et les e-mails", hint: "", run: () => refreshOverview(true) },
+  { label: "Raccourcis clavier", hint: "?", run: () => openOverlay("help") },
+];
+let paletteIndex = 0;
+let paletteItems = [];
+
+function renderPalette() {
+  const q = fold($("palette-input").value.trim());
+  paletteItems = COMMANDS.filter((c) => !q || fold(c.label).includes(q));
+  const text = $("palette-input").value.trim();
+  if (text) paletteItems.push({ label: `Demander : « ${text} »`, hint: "Entrée", run: () => ask(text) });
+  paletteIndex = Math.min(paletteIndex, paletteItems.length - 1);
+  $("palette-list").replaceChildren(...paletteItems.map((c, i) =>
+    el("li", { class: i === paletteIndex ? "active" : "", role: "option", onclick: () => runPalette(i) }, c.label, el("span", {}, c.hint))));
+}
+function openPalette() {
+  $("palette-input").value = "";
+  paletteIndex = 0;
+  renderPalette();
+  openOverlay("palette");
+  $("palette-input").focus();
+}
+function runPalette(i) {
+  const item = paletteItems[i];
+  closeOverlay("palette");
+  if (item) Promise.resolve(item.run()).catch((e) => toast(e.message, "error"));
 }
 
-async function refreshSystem() {
-  try {
-    const s = await api("GET", "/api/system");
-    meter("cpu", s.cpu); meter("ram", s.ram); meter("disk", s.disk);
-    $("battery-row").hidden = s.battery === null;
-    if (s.battery !== null) meter("bat", s.battery);
-    $("sys-info").textContent = `${s.os} · ${s.ram_used_gb}/${s.ram_total_gb} Go · allumé depuis ${s.uptime_h} h`;
-    const timers = $("timers");
-    timers.replaceChildren(...(s.timers.length
-      ? s.timers.map((t) => el("li", {}, el("span", {}, t.label), el("b", { class: "muted" }, t.due.slice(11, 16))))
-      : [el("li", { class: "muted small" }, "Aucun minuteur.")]));
-    if (info.voice_enabled && $("reactor").dataset.state === "listening") {
-      $("reactor").style.setProperty("--s", String(1 + Math.min(0.18, (s.mic_level || 0) / 20000)));
-    } else {
-      $("reactor").style.setProperty("--s", "1");
-    }
-  } catch (_) {}
+// ------------------------------------------------------------------ actions
+
+function talk() {
+  if (!info.voice_enabled) { toast("Le micro n'est pas actif : écris ta demande.", "alert"); return; }
+  api("POST", "/api/listen").catch((e) => toast(e.message, "error"));
+}
+
+function toggleFocus() {
+  const on = !$("app").classList.contains("focus");
+  $("app").classList.toggle("focus", on);
+  try { localStorage.setItem("assistant-focus", on ? "1" : "0"); } catch (_) {}
+}
+
+function showTab(name) {
+  for (const t of document.querySelectorAll(".tab")) {
+    const active = t.dataset.tab === name;
+    t.classList.toggle("active", active);
+    t.setAttribute("aria-selected", String(active));
+  }
+  for (const p of document.querySelectorAll(".panel")) p.hidden = p.id !== `tab-${name}`;
+  if ($("app").classList.contains("focus")) toggleFocus();
 }
 
 // ------------------------------------------------------------------ aujourd'hui
 
-function fmtTime(iso, allDay) {
-  if (allDay) return "journée";
-  const d = new Date(iso);
-  const today = new Date();
-  const time = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  return d.toDateString() === today.toDateString() ? time : `dem. ${time}`;
+function tickClock() {
+  const now = new Date();
+  $("clock").textContent = time(now);
+  $("date").textContent = now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  renderTimersCountdown();
+}
+
+function untilLabel(start) {
+  const minutes = Math.round((start - Date.now()) / 60000);
+  if (minutes < 0 || minutes > 120) return null;
+  return minutes <= 1 ? "maintenant" : minutes < 60 ? `dans ${minutes} min` : `dans ${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}`;
 }
 
 async function refreshOverview(force = false) {
@@ -274,44 +496,99 @@ async function refreshOverview(force = false) {
     const o = await api("GET", "/api/overview");
     if (o.weather) {
       const w = o.weather;
-      $("weather").replaceChildren(
-        el("div", { class: "wx-now" }, el("span", { class: "wx-temp" }, `${w.temp}°`),
-          el("div", {}, el("div", {}, w.text), el("div", { class: "muted small" }, `${w.place} · ressenti ${w.feels}° · vent ${w.wind} km/h`))),
-        el("div", { class: "wx-days" }, w.days.map((d) => el("div", { class: "wx-day" },
-          el("div", { class: "muted" }, new Date(d.date).toLocaleDateString("fr-FR", { weekday: "short" })),
-          el("div", {}, `${d.min}° / ${d.max}°`), el("div", { class: "muted" }, `☂ ${d.rain}%`)))),
-      );
-      $("weather").classList.remove("muted", "small");
+      $("weather").classList.remove("muted");
+      $("weather").replaceChildren(el("div", { class: "wx" },
+        el("span", { class: "wx-temp" }, `${w.temp}°`),
+        el("span", { class: "wx-text" }, w.text[0].toUpperCase() + w.text.slice(1)),
+        el("span", { class: "wx-sub" }, `ressenti ${w.feels}° · vent ${w.wind} km/h`),
+        el("div", { class: "wx-days" }, w.days.slice(1, 4).map((d) => el("div", { class: "wx-day" },
+          el("b", {}, new Date(d.date).toLocaleDateString("fr-FR", { weekday: "short" })),
+          el("span", {}, `${d.min}° · ${d.max}°`), el("span", { class: "muted" }, `pluie ${d.rain} %`))))));
     }
-    if (o.events) {
-      const now = Date.now();
-      $("events").replaceChildren(...(o.events.length ? o.events.map((ev) => {
-        const soon = !ev.all_day && new Date(ev.start) - now < 3600e3 && new Date(ev.start) > now;
-        return el("li", { class: `item${soon ? " soon" : ""}` },
-          el("span", { class: "when" }, fmtTime(ev.start, ev.all_day)), el("span", { class: "title" }, ev.title),
-          ev.location ? el("span", { class: "sub" }, ev.location) : null);
-      }) : [el("li", { class: "muted small" }, "Rien de prévu aujourd'hui ni demain.")]));
-    }
+    if (o.events) renderEvents(o.events);
     if (o.emails) {
-      $("emails").replaceChildren(...(o.emails.length ? o.emails.map((m) =>
-        el("li", { class: "item" }, el("span", { class: "when" }, "✉"),
-          el("span", { class: "title" }, m.subject || "(sans objet)"),
-          el("span", { class: "sub" }, `${m.from.replace(/<.*>/, "").trim()} — ${m.snippet.slice(0, 110)}`)))
-        : [el("li", { class: "muted small" }, "Boîte de réception à jour.")]));
+      $("mail-count").textContent = o.emails.length ? String(o.emails.length) : "";
+      $("emails").replaceChildren(...(o.emails.length ? o.emails.slice(0, 5).map((m) => el("li", {},
+        el("span", { class: "from" }, m.from.replace(/<.*>/, "").replace(/"/g, "").trim() || m.from),
+        el("span", { class: "subj" }, m.subject || "(sans objet)")))
+        : [el("li", { class: "muted" }, "Rien de nouveau.")]));
     }
     for (const e of o.errors || []) addActivity("Erreur", e);
   } catch (_) {}
 }
 
-// ------------------------------------------------------------------ mémoire
+function renderEvents(events) {
+  const today = new Date().toDateString();
+  const items = [];
+  let lastDay = null;
+  for (const ev of events) {
+    const start = new Date(ev.start);
+    const day = start.toDateString() === today ? "Aujourd'hui" : "Demain";
+    if (day !== lastDay) { items.push(el("li", { class: "day-sep" }, day)); lastDay = day; }
+    const soon = ev.all_day ? null : untilLabel(start);
+    items.push(el("li", {},
+      el("span", { class: "t" }, ev.all_day ? "jour" : time(start)),
+      el("span", { class: "what" }, ev.title),
+      soon ? el("span", { class: "soon" }, soon) : ev.location ? el("span", { class: "where" }, ev.location) : null));
+  }
+  $("events").replaceChildren(...(items.length ? items : [el("li", { class: "muted" }, "Rien de prévu aujourd'hui ni demain.")]));
+}
+
+let timers = [];
+function renderTimersCountdown() {
+  $("g-timers").hidden = timers.length === 0;
+  $("timers").replaceChildren(...timers.map((t) => {
+    const left = Math.max(0, Math.round((new Date(t.due) - Date.now()) / 1000));
+    if (!timerTotals.has(t.id)) timerTotals.set(t.id, Math.max(left, 1));
+    const pct = Math.min(100, (100 * left) / timerTotals.get(t.id));
+    const mm = String(Math.floor(left / 60)).padStart(2, "0"), ss = String(left % 60).padStart(2, "0");
+    return el("li", {}, el("div", { class: "row" }, el("span", {}, t.label), el("span", { class: "left" }, `${mm}:${ss}`)),
+      el("div", { class: "bar" }, el("i", { style: `width:${pct}%` })));
+  }));
+}
+
+// ------------------------------------------------------------------ système
+
+function gauge(id, value) {
+  const canvas = $(id);
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, c = w / 2, r = w * 0.4;
+  const css = getComputedStyle(document.documentElement);
+  const color = value >= 90 ? css.getPropertyValue("--danger") : value >= 75 ? css.getPropertyValue("--warn") : css.getPropertyValue("--accent");
+  ctx.clearRect(0, 0, w, w);
+  ctx.lineWidth = w * 0.08;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = css.getPropertyValue("--line");
+  ctx.beginPath(); ctx.arc(c, c, r, Math.PI * 0.75, Math.PI * 2.25); ctx.stroke();
+  ctx.strokeStyle = color.trim();
+  ctx.beginPath(); ctx.arc(c, c, r, Math.PI * 0.75, Math.PI * (0.75 + 1.5 * Math.min(1, value / 100))); ctx.stroke();
+  ctx.fillStyle = css.getPropertyValue("--text");
+  ctx.font = `600 ${w * 0.2}px ${css.getPropertyValue("--font-mono")}`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(`${Math.round(value)}`, c, c + w * 0.02);
+}
+
+async function refreshSystem() {
+  try {
+    const s = await api("GET", "/api/system");
+    timers = s.timers || [];
+    renderTimersCountdown();
+    if ($("tab-system").hidden) return;
+    gauge("gauge-cpu", s.cpu); gauge("gauge-ram", s.ram); gauge("gauge-disk", s.disk);
+    $("gauge-bat-wrap").hidden = s.battery === null;
+    if (s.battery !== null) gauge("gauge-bat", s.battery);
+    $("sys-info").textContent = `${s.os} · ${s.ram_used_gb} / ${s.ram_total_gb} Go · allumé depuis ${s.uptime_h} h`;
+  } catch (_) {}
+}
+
+// ------------------------------------------------------------------ mémoire et tâches
 
 let searchTimer = null;
-
 async function loadMemory() {
   try {
     const q = $("memory-search").value.trim();
     const m = await api("GET", `/api/memory?q=${encodeURIComponent(q)}`);
-    $("facts-count").textContent = `${m.stats.facts}`;
+    $("facts-count").textContent = String(m.stats.facts);
     renderFacts(m.facts, Boolean(q));
     renderEpisodes(m.episodes);
     renderTasks(m.tasks);
@@ -321,7 +598,7 @@ async function loadMemory() {
 function renderFacts(facts, searching) {
   if (!facts.length) {
     $("facts").replaceChildren(el("p", { class: "muted small" },
-      searching ? "Aucun souvenir ne correspond." : "Jarvis n'a encore rien mémorisé. Parle-lui de toi !"));
+      searching ? "Aucun souvenir ne correspond." : "Rien pour l'instant. Parle-moi de toi, je retiendrai ce qui compte."));
     return;
   }
   const groups = new Map();
@@ -335,106 +612,129 @@ function renderFacts(facts, searching) {
 }
 
 function renderFact(f) {
-  const text = el("span", { class: "text", title: `Mémorisé le ${f.created_at.slice(0, 10)}` }, f.content);
-  const save = async () => {
+  const text = el("span", { class: "text", title: `Retenu le ${new Date(f.created_at).toLocaleDateString("fr-FR")}` }, f.content);
+  let confirming = false;
+  text.addEventListener("blur", async () => {
     text.contentEditable = "false";
     const value = text.textContent.trim();
-    if (value && value !== f.content) await api("PUT", `/api/facts/${f.id}`, { fact: value }).catch((e) => toast(e.message));
-  };
-  text.addEventListener("blur", save);
+    if (value && value !== f.content) await api("PUT", `/api/facts/${f.id}`, { fact: value }).catch((e) => toast(e.message, "error"));
+  });
   text.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); text.blur(); } });
-  const cycle = async () => {
-    const next = (f.importance % 3) + 1;
-    await api("PUT", `/api/facts/${f.id}`, { importance: next }).catch((e) => toast(e.message));
-  };
+  const del = el("button", { class: "mini", title: "Oublier", "aria-label": "Oublier ce souvenir" }, "✕");
+  del.addEventListener("click", () => {
+    if (!confirming) { confirming = true; del.textContent = "Oublier ?"; setTimeout(() => { confirming = false; del.textContent = "✕"; }, 3000); return; }
+    api("DELETE", `/api/facts/${f.id}`).catch((e) => toast(e.message, "error"));
+  });
+  const levels = ["", "détail", "utile", "essentiel"];
   return el("div", { class: "fact" },
-    el("span", { class: `imp i${f.importance}`, title: "Importance (cliquer pour changer)", onclick: cycle, style: "cursor:pointer" }),
+    el("button", { class: `imp i${f.importance}`, title: `Importance : ${levels[f.importance]} (cliquer pour changer)`, "aria-label": "Changer l'importance",
+      onclick: () => api("PUT", `/api/facts/${f.id}`, { importance: (f.importance % 3) + 1 }).catch((e) => toast(e.message, "error")) }),
     text,
     el("span", { class: "acts" },
-      el("button", { class: "mini", title: "Modifier", onclick: () => { text.contentEditable = "true"; text.focus(); } }, "✎"),
-      el("button", { class: "mini", title: "Oublier", onclick: () => {
-        if (confirm(`Oublier : « ${f.content} » ?`)) api("DELETE", `/api/facts/${f.id}`).catch((e) => toast(e.message));
-      } }, "✕")));
+      el("button", { class: "mini", title: "Modifier", "aria-label": "Modifier", onclick: () => { text.contentEditable = "true"; text.focus(); } }, "✎"),
+      del));
 }
 
 function renderEpisodes(episodes) {
-  $("episodes").replaceChildren(...(episodes.length ? episodes.map((e) =>
-    el("li", { class: "item" },
-      el("span", { class: "when" }, new Date(e.started_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })),
-      el("span", { class: "title" }, e.summary),
-      el("span", { class: "sub" }, el("button", { class: "mini", title: "Supprimer ce souvenir", onclick: () => {
-        if (confirm("Supprimer le résumé de cette conversation ?")) api("DELETE", `/api/episodes/${e.id}`).then(loadMemory);
-      } }, "supprimer"))))
-    : [el("li", { class: "muted small" }, "Les conversations terminées apparaîtront ici, résumées.")]));
+  $("episodes").replaceChildren(...(episodes.length ? episodes.map((e) => el("li", {},
+    el("span", { class: "when" }, new Date(e.started_at).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }),
+      el("button", { class: "mini", title: "Supprimer ce résumé", onclick: () => api("DELETE", `/api/episodes/${e.id}`).then(loadMemory) }, "✕")),
+    el("span", {}, e.summary)))
+    : [el("li", { class: "muted small" }, "Chaque conversation terminée est résumée ici.")]));
+}
+
+function taskItem(t) {
+  const today = new Date().toISOString().slice(0, 10);
+  const box = el("input", { type: "checkbox", checked: t.done, "aria-label": `Terminer ${t.title}`,
+    onchange: () => api("POST", `/api/tasks/${t.id}/toggle`, { done: box.checked }).catch((e) => toast(e.message, "error")) });
+  return el("li", { class: `task${t.done ? " done" : ""}` }, box,
+    el("span", { class: "title" }, t.title),
+    t.due ? el("span", { class: `due${!t.done && t.due.slice(0, 10) < today ? " late" : ""}` },
+      new Date(t.due.slice(0, 10)).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })) : null,
+    el("button", { class: "mini", title: "Supprimer", "aria-label": "Supprimer", onclick: () => api("DELETE", `/api/tasks/${t.id}`) }, "✕"));
 }
 
 function renderTasks(tasks) {
+  const open = tasks.filter((t) => !t.done);
+  $("tasks-count").textContent = open.length ? `${open.length} en cours` : "";
+  $("tasks").replaceChildren(...(tasks.length ? tasks.map(taskItem)
+    : [el("li", { class: "muted small" }, "Aucune tâche. Dis-moi « ajoute … à ma liste ».")]));
   const today = new Date().toISOString().slice(0, 10);
-  $("tasks").replaceChildren(...(tasks.length ? tasks.map((t) => {
-    const box = el("input", { type: "checkbox", checked: t.done, onchange: () =>
-      api("POST", `/api/tasks/${t.id}/toggle`, { done: box.checked }).catch((e) => toast(e.message)) });
-    return el("li", { class: `task${t.done ? " done" : ""}` }, box,
-      el("span", { class: "title" }, t.title),
-      t.due ? el("span", { class: `due${!t.done && t.due.slice(0, 10) < today ? " late" : ""}` }, t.due) : null,
-      el("button", { class: "mini", title: "Supprimer", onclick: () => api("DELETE", `/api/tasks/${t.id}`) }, "✕"));
-  }) : [el("li", { class: "muted small" }, "Aucune tâche. Dis « ajoute à ma liste… » à Jarvis.")]));
+  const soon = open.filter((t) => !t.due || t.due.slice(0, 10) <= today).slice(0, 6);
+  $("tasks-today").replaceChildren(...(soon.length ? soon.map(taskItem) : [el("li", { class: "muted" }, "Rien d'urgent.")]));
 }
 
-// ------------------------------------------------------------------ actions
+// ------------------------------------------------------------------ liaison de l'interface
 
-async function refreshState() {
-  try {
-    info = await api("GET", "/api/state");
-    renderInfo();
-    return info;
-  } catch (_) { return null; }
+function typing(e) {
+  const t = e.target;
+  return t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || t.isContentEditable;
 }
 
 function bindUi() {
-  $("composer").addEventListener("submit", async (e) => {
+  $("composer").addEventListener("submit", (e) => {
     e.preventDefault();
     const text = $("input").value.trim();
     if (!text) return;
     $("input").value = "";
-    await api("POST", "/api/ask", { text }).catch((err) => toast(err.message));
+    ask(text);
   });
-  $("btn-mic").addEventListener("click", () => api("POST", "/api/listen").catch((e) => toast(e.message)));
+  $("btn-talk").addEventListener("click", talk);
   $("btn-stop").addEventListener("click", () => api("POST", "/api/stop"));
   $("btn-briefing").addEventListener("click", () => api("POST", "/api/briefing"));
   $("btn-reset").addEventListener("click", () => api("POST", "/api/reset"));
+  $("btn-palette").addEventListener("click", openPalette);
   $("btn-refresh").addEventListener("click", () => refreshOverview(true));
   $("confirm-yes").addEventListener("click", () => answerConfirm(true));
   $("confirm-no").addEventListener("click", () => answerConfirm(false));
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { if (currentConfirm) answerConfirm(false); else api("POST", "/api/stop"); }
-  });
-  $("memory-search").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadMemory, 250); });
+  $("palette-input").addEventListener("input", () => { paletteIndex = 0; renderPalette(); });
+  for (const id of ["palette", "help"]) $(id).addEventListener("click", (e) => { if (e.target === $(id)) closeOverlay(id); });
+  $("memory-search").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadMemory, 220); });
   $("fact-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fact = $("fact-input").value.trim();
     if (!fact) return;
-    await api("POST", "/api/facts", { fact, importance: Number($("fact-importance").value) }).catch((err) => toast(err.message));
+    await api("POST", "/api/facts", { fact, importance: Number($("fact-importance").value) }).then(() => toast("C'est retenu.")).catch((err) => toast(err.message, "error"));
     $("fact-input").value = "";
   });
   $("task-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const title = $("task-input").value.trim();
     if (!title) return;
-    await api("POST", "/api/tasks", { title, due: $("task-due").value }).catch((err) => toast(err.message));
+    await api("POST", "/api/tasks", { title, due: $("task-due").value }).catch((err) => toast(err.message, "error"));
     $("task-input").value = ""; $("task-due").value = "";
   });
-  for (const tab of document.querySelectorAll(".tab")) {
-    tab.addEventListener("click", () => {
-      for (const t of document.querySelectorAll(".tab")) t.classList.toggle("active", t === tab);
-      for (const p of document.querySelectorAll(".tab-panel")) p.hidden = p.id !== `tab-${tab.dataset.tab}`;
-    });
-  }
+  for (const tab of document.querySelectorAll(".tab")) tab.addEventListener("click", () => { showTab(tab.dataset.tab); if (tab.dataset.tab === "system") refreshSystem(); });
+
+  document.addEventListener("keydown", (e) => {
+    const overlay = anyOverlay();
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); overlay === "palette" ? closeOverlay("palette") : openPalette(); return; }
+    if (overlay === "palette") {
+      if (e.key === "ArrowDown") { e.preventDefault(); paletteIndex = Math.min(paletteIndex + 1, paletteItems.length - 1); renderPalette(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); paletteIndex = Math.max(paletteIndex - 1, 0); renderPalette(); }
+      else if (e.key === "Enter") { e.preventDefault(); runPalette(paletteIndex); }
+      else if (e.key === "Escape") closeOverlay("palette");
+      return;
+    }
+    if (overlay === "confirm") {
+      if (e.key === "Escape") answerConfirm(false);
+      return;
+    }
+    if (e.key === "Escape") { if (overlay) closeOverlay(overlay); else api("POST", "/api/stop"); return; }
+    if (typing(e)) return;
+    if (e.key === " ") { e.preventDefault(); talk(); }
+    else if (e.key === "/") { e.preventDefault(); $("input").focus(); }
+    else if (e.key.toLowerCase() === "f") toggleFocus();
+    else if (e.key === "?") openOverlay("help");
+  });
 }
 
 async function main() {
   bindUi();
+  renderSuggestions();
   tickClock();
   setInterval(tickClock, 1000);
+  try { if (localStorage.getItem("assistant-focus") === "1") $("app").classList.add("focus"); } catch (_) {}
   if (!TOKEN) { $("lock").hidden = false; return; }
   const state = await refreshState();
   if (!state) return;
@@ -443,7 +743,7 @@ async function main() {
   for (const c of state.pending_confirms) openConfirm(c);
   connectEvents();
   refreshSystem();
-  setInterval(refreshSystem, 2000);
+  setInterval(refreshSystem, 3000);
   refreshOverview();
   setInterval(refreshOverview, 120000);
   loadMemory();
