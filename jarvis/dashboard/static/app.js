@@ -25,6 +25,7 @@ const TOOL_LABELS = {
   write_text_file: "J'écris le fichier", open_path: "J'ouvre", get_weather: "Météo",
   gmail_list: "Je regarde tes e-mails", gmail_read: "Je lis l'e-mail", gmail_send: "J'envoie l'e-mail",
   calendar_list: "Je regarde ton agenda", calendar_create: "J'ajoute à l'agenda", calendar_delete: "Je retire de l'agenda",
+  rename_assistant: "Je change de nom",
 };
 const SUGGESTIONS = [
   "Fais-moi le point sur ma journée",
@@ -370,6 +371,9 @@ function handleEvent(ev, replay = false) {
     case "memory_changed": if (!replay) { loadMemory(); refreshState(); } break;
     case "wake": $("hint").textContent = "Je t'écoute…"; break;
     case "barge_in": addActivity("Interrompu à la voix"); break;
+    case "renamed":
+      if (!replay) { toast(`Je m'appelle maintenant ${d.name}. Appelle-moi par ce nom.`); refreshState(); }
+      break;
     case "stopped": fadeCaption(); addActivity("Réponse interrompue"); break;
   }
 }
@@ -420,6 +424,10 @@ const COMMANDS = [
   { label: "Interrompre", hint: "Échap", run: () => api("POST", "/api/stop") },
   { label: "Nouvelle conversation", hint: "Range celle-ci dans la mémoire", run: () => api("POST", "/api/reset") },
   { label: "Mode concentration", hint: "F", run: () => toggleFocus() },
+  { label: "Changer son nom", hint: "Il te demandera confirmation", run: () => {
+    $("input").value = "À partir de maintenant, tu t'appelles ";
+    $("input").focus();
+  } },
   { label: "Ouvrir la mémoire", hint: "Panneau", run: () => showTab("memory") },
   { label: "Ouvrir les tâches", hint: "Panneau", run: () => showTab("tasks") },
   { label: "Voir l'activité", hint: "Panneau", run: () => showTab("activity") },

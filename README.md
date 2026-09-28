@@ -1,6 +1,6 @@
-# Orion — ton assistant personnel
+# Jarvis — ton assistant personnel
 
-Ton assistant personnel de bureau : tu l'appelles par son nom, comme une personne (« **Orion, mets de la musique** »), il te répond avec une voix naturelle et agit sur ton ordinateur, tes e-mails, ton agenda et tes tâches. Il se souvient de toi d'une conversation à l'autre, et tout se pilote depuis un **centre de commande** dans ton navigateur.
+Ton assistant personnel de bureau : tu l'appelles par son nom, comme une personne (« **Jarvis, mets de la musique** »), il te répond avec une voix naturelle et agit sur ton ordinateur, tes e-mails, ton agenda et tes tâches. Il se souvient de toi d'une conversation à l'autre, et tout se pilote depuis un **centre de commande** dans ton navigateur.
 
 Son cerveau est **Claude**, branché sur **ton abonnement Claude** (Pro ou Max) via Claude Code : pas de facture à l'usage. L'écoute, la voix, la mémoire et le centre de commande tournent sur ton PC.
 
@@ -8,7 +8,7 @@ Son cerveau est **Claude**, branché sur **ton abonnement Claude** (Pro ou Max) 
 
 | Domaine | Exemples |
 |---|---|
-| Conversation vocale | Tu l'appelles par son nom, au début ou à la fin de ta phrase (« Orion, quel temps demain ? », « … baisse le son, Orion »), puis tu enchaînes sans le rappeler. Il commence à parler dès la première phrase de sa réponse, et tu lui coupes la parole en l'appelant (ou Échap, ou le bouton ■). Son nom se change dans `.env`. |
+| Conversation vocale | Tu l'appelles par son nom, au début ou à la fin de ta phrase (« Jarvis, quel temps demain ? », « … baisse le son, Jarvis »), puis tu enchaînes sans le rappeler. Il commence à parler dès la première phrase de sa réponse, et tu lui coupes la parole en l'appelant (ou Échap, ou le bouton ■). Tu peux le renommer à la voix : « Jarvis, à partir de maintenant tu t'appelles Kali ». |
 | Centre de commande | Une présence animée qui réagit à ta voix et à la sienne, avec ses paroles en sous-titres ; conversation en direct, état du PC, météo, agenda, e-mails, mémoire modifiable, tâches, minuteurs, journal des actions, boutons « Faire le point » et « Nouvelle conversation », palette de commandes et raccourcis clavier. |
 | Mémoire | Il retient seul ce qui compte (goûts, proches, projets, habitudes), retrouve les souvenirs utiles à chaque message et résume chaque conversation. Tu peux lui demander « de quoi on a parlé mardi ? ». |
 | Briefing | « Fais-moi le point » : date, météo, agenda du jour, e-mails importants, tâches. |
@@ -24,11 +24,11 @@ Son cerveau est **Claude**, branché sur **ton abonnement Claude** (Pro ou Max) 
 
 ## Installation
 
-Il te faut **Python 3.10 à 3.12** (Windows, macOS ou Linux), un micro, des haut-parleurs et un **compte Claude Pro ou Max**. Claude Code est installé automatiquement avec Orion.
+Il te faut **Python 3.10 à 3.12** (Windows, macOS ou Linux), un micro, des haut-parleurs et un **compte Claude Pro ou Max**. Claude Code est installé automatiquement avec Jarvis.
 
 ### En un clic
 
-- **Windows** : double-clique sur `install.bat`. Il installe tout, ouvre le fichier `.env` pour ton prénom et ta ville, te fait connecter ton compte Claude dans le navigateur, puis lance le diagnostic. Ensuite, lance Orion avec `jarvis.bat`.
+- **Windows** : double-clique sur `install.bat`. Il installe tout, ouvre le fichier `.env` pour ton prénom et ta ville, te fait connecter ton compte Claude dans le navigateur, puis lance le diagnostic. Ensuite, lance Jarvis avec `jarvis.bat`.
 - **macOS / Linux** : `./install.sh`, remplis `.env`, puis `./jarvis.sh`.
 
 ### À la main
@@ -47,14 +47,14 @@ python -m jarvis --login    # connecte ton compte Claude (une seule fois)
 python -m jarvis --doctor   # vérifie tout : compte Claude, micro, haut-parleurs, voix, Whisper, Google
 python -m jarvis            # voix + centre de commande (s'ouvre dans le navigateur)
 python -m jarvis --text     # sans micro ni voix : clavier + centre de commande
-python -m jarvis --memory   # voir ce que Orion a retenu de toi
+python -m jarvis --memory   # voir ce que Jarvis a retenu de toi
 ```
 
-Au premier lancement, le modèle de reconnaissance vocale Whisper (~500 Mo pour `small`) se télécharge automatiquement. Si le micro pose problème, Orion démarre quand même, au clavier et dans le centre de commande.
+Au premier lancement, le modèle de reconnaissance vocale Whisper (~500 Mo pour `small`) se télécharge automatiquement. Si le micro pose problème, Jarvis démarre quand même, au clavier et dans le centre de commande.
 
 Le lien du centre de commande s'affiche dans le terminal (`http://127.0.0.1:8765/#token=…`). Garde l'onglet ouvert. Si tu le fermes, reprends le lien depuis le terminal.
 
-Au premier lancement de la matinée, Orion te fait un briefing (météo, agenda, e-mails, tâches) au lieu d'un simple bonjour (`JARVIS_DAILY_BRIEFING=0` pour le désactiver).
+Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda, e-mails, tâches) au lieu d'un simple bonjour (`JARVIS_DAILY_BRIEFING=0` pour le désactiver).
 
 ### Connecter Gmail et Google Agenda (optionnel)
 
@@ -78,7 +78,7 @@ Au premier lancement de la matinée, Orion te fait un briefing (météo, agenda,
 ## Comment fonctionne sa mémoire
 
 - **Faits** : ce qu'il sait de toi, classés par catégorie et par importance (détail, utile, essentiel). Les essentiels et les plus utilisés sont toujours présents à son esprit. Les autres sont retrouvés automatiquement quand ton message en parle.
-- **Conversations** : après 20 minutes sans échange, quand tu cliques sur « Nouvelle conversation », quand tu quittes, ou quand une conversation devient très longue, Orion la résume et en extrait les nouvelles infos durables. Les derniers résumés sont repris au début de chaque conversation.
+- **Conversations** : après 20 minutes sans échange, quand tu cliques sur « Nouvelle conversation », quand tu quittes, ou quand une conversation devient très longue, Jarvis la résume et en extrait les nouvelles infos durables. Les derniers résumés sont repris au début de chaque conversation.
 - **Journal** : tout est archivé et consultable (« qu'est-ce que je t'avais dit sur le voyage ? »).
 - Tout est stocké en local dans `~/.jarvis/memory.sqlite3`. Tu peux corriger, noter ou supprimer chaque souvenir depuis l'onglet **Mémoire** du centre de commande.
 
@@ -92,7 +92,7 @@ Au premier lancement de la matinée, Orion te fait un briefing (météo, agenda,
 | `JARVIS_VOICE` | Voix (`edge-tts --list-voices`) | `fr-FR-RemyMultilingualNeural` |
 | `JARVIS_VOICE_RATE` | Débit de parole | `+5%` |
 | `JARVIS_WHISPER_MODEL` | Précision de l'écoute : `base`, `small`, `medium`, `large-v3` | `small` |
-| `JARVIS_NAME` | Nom de l'assistant, et mot qui le réveille | `Orion` |
+| `JARVIS_NAME` | Nom de l'assistant, et mot qui le réveille. Un nom donné à la voix l'emporte sur ce réglage. | `Jarvis` |
 | `JARVIS_NAME_ALIASES` | Autres orthographes du nom que la transcription pourrait écrire | vide |
 | `JARVIS_WAKE_MODE` | `nom` (l'appeler par son nom) ou `hey` (« Hey Jarvis », seule formule de ce mode, plus léger pour le PC) | `nom` |
 | `JARVIS_WAKE_THRESHOLD` | Sensibilité de « Hey Jarvis » en mode `hey` | `0.5` |
@@ -111,12 +111,12 @@ Pour des réponses plus rapides : `JARVIS_EFFORT=low`. Avec une carte graphique 
 
 ## Combien ça coûte
 
-- **Cerveau** : ton abonnement Claude (Pro ou Max), à prix fixe. Les échanges avec Orion comptent dans les limites d'utilisation de ton abonnement, partagées avec ton usage normal de Claude. Si tu atteins la limite, Orion te le dit et te donne l'heure de réinitialisation. Pour dépenser moins de quota : `JARVIS_EFFORT=low`, ou `JARVIS_MODEL=claude-sonnet-5`.
-- **Voix** : gratuite par défaut (Edge). ElevenLabs est payant au-delà de son petit quota gratuit, et Orion repasse tout seul sur la voix gratuite quand le quota est épuisé.
+- **Cerveau** : ton abonnement Claude (Pro ou Max), à prix fixe. Les échanges avec Jarvis comptent dans les limites d'utilisation de ton abonnement, partagées avec ton usage normal de Claude. Si tu atteins la limite, Jarvis te le dit et te donne l'heure de réinitialisation. Pour dépenser moins de quota : `JARVIS_EFFORT=low`, ou `JARVIS_MODEL=claude-sonnet-5`.
+- **Voix** : gratuite par défaut (Edge). ElevenLabs est payant au-delà de son petit quota gratuit, et Jarvis repasse tout seul sur la voix gratuite quand le quota est épuisé.
 - **Mode API** (`JARVIS_BRAIN=api`) : facturé à l'usage par Anthropic, utile si tu n'as pas d'abonnement.
 - Tout le reste (écoute, mot d'activation, mémoire, centre de commande, météo) est gratuit et tourne sur ton PC.
 
-Ce mode abonnement est prévu pour **ton usage personnel**, sur ton PC et avec ton compte. Anthropic n'autorise pas à proposer une connexion avec un compte Claude dans un produit distribué à d'autres personnes : pour partager Orion, chacun utilise son propre compte, ou le mode API.
+Ce mode abonnement est prévu pour **ton usage personnel**, sur ton PC et avec ton compte. Anthropic n'autorise pas à proposer une connexion avec un compte Claude dans un produit distribué à d'autres personnes : pour partager Jarvis, chacun utilise son propre compte, ou le mode API.
 
 ## Dépannage
 
@@ -149,7 +149,7 @@ jarvis/
 ├── dashboard/
 │   ├── server.py        # serveur local + API + flux d'événements en direct (SSE)
 │   └── static/          # interface du centre de commande
-└── tools/               # ce que Orion sait faire
+└── tools/               # ce que Jarvis sait faire
     ├── system_tools.py  # applis, médias, écran, presse-papiers, processus, minuteurs, terminal
     ├── file_tools.py    # fichiers
     ├── web_tools.py     # météo

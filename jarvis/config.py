@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,8 +34,8 @@ class Config:
     idle_minutes: float = field(default_factory=lambda: float(_env("JARVIS_IDLE_MINUTES", "20")))
 
     # Identité
-    # Le nom de l'assistant : c'est aussi le mot qui le réveille (« Orion, mets de la musique »).
-    assistant_name: str = field(default_factory=lambda: _env("JARVIS_NAME", "Orion"))
+    # Le nom de l'assistant : c'est aussi le mot qui le réveille (« Jarvis, mets de la musique »).
+    assistant_name: str = field(default_factory=lambda: _env("JARVIS_NAME", "Jarvis"))
     # Autres orthographes que la transcription pourrait produire, séparées par des virgules.
     name_aliases: list[str] = field(
         default_factory=lambda: [a.strip() for a in _env("JARVIS_NAME_ALIASES", "").split(",") if a.strip()]
@@ -79,6 +80,28 @@ class Config:
 
     def __post_init__(self) -> None:
         self.home.mkdir(parents=True, exist_ok=True)
+        # Un nom donné à la voix (« tu t'appelles Kali ») l'emporte sur le fichier .env.
+        state = self.load_state()
+        if state.get("assistant_name"):
+            self.assistant_name = state["assistant_name"]
+            self.name_aliases = list(state.get("name_aliases", []))
+
+    # État mémorisé entre deux lancements (~/.jarvis/state.json).
+
+    @property
+    def state_file(self) -> Path:
+        return self.home / "state.json"
+
+    def load_state(self) -> dict:
+        try:
+            return json.loads(self.state_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def save_state(self, **updates) -> None:
+        state = self.load_state()
+        state.update(updates)
+        self.state_file.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
 
     @property
     def wake_by_name(self) -> bool:

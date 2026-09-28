@@ -102,6 +102,7 @@ class Core:
             self.brain = Brain(config, self.memory, registry, client=client, confirm=self.confirm,
                                notify=self.notify, on_event=self.bus.publish)
         self.voice = None  # VoiceLoop, branchée par l'application en mode vocal
+        self._name = config.assistant_name
         self.state = "idle"
         self.awaiting_follow_up = False
         self.last_activity = time.monotonic()
@@ -187,12 +188,28 @@ class Core:
                 else:
                     job.result = self._answer(job)
             finally:
+                self._apply_rename()
                 self._busy = False
                 self.last_activity = time.monotonic()
                 self.awaiting_follow_up = job.source == "voice"
                 if not self.speaker.speaking:
                     self.set_state("idle")
                 job.done.set()
+
+    def _apply_rename(self) -> None:
+        """Après un changement de nom à la voix : réveil, personnalité et interface suivent."""
+        name = self.config.assistant_name
+        if name == self._name:
+            return
+        self._name = name
+        if self.voice is not None:
+            self.voice.rename(name, self.config.name_aliases)
+        # La personnalité est figée pour une conversation : on en ouvre une nouvelle avec le nouveau nom.
+        if self.brain.turns:
+            self._consolidate()
+        else:
+            self.brain.reset()
+        self.bus.publish("renamed", {"name": name})
 
     def _reply(self, text: str) -> None:
         self.bus.publish("assistant_message", {"text": text})

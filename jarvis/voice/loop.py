@@ -35,6 +35,12 @@ class VoiceLoop:
         self._push_to_talk = threading.Event()
         self._running = False
 
+    def rename(self, name: str, aliases: list[str]) -> None:
+        """Le nom a changé : c'est maintenant lui qui réveille l'assistant."""
+        if self.spotter:
+            self.spotter = NameSpotter(name, aliases)
+        self.listener.name = name  # aide Whisper à bien l'écrire
+
     @property
     def activation_hint(self) -> str:
         name = self.core.config.assistant_name

@@ -528,7 +528,7 @@ def test_subscription_brain_streams_and_uses_subscription(sub_brain, memory):
     assert "".join(deltas) == reply
     assert "ANTHROPIC_API_KEY" not in os.environ  # sinon Claude Code facturerait l'API
     opts = sdk.options[0]
-    assert "Tu es Orion" in opts.system_prompt and "guitare" in opts.system_prompt
+    assert "Tu es Jarvis" in opts.system_prompt and "guitare" in opts.system_prompt
     assert "mcp__jarvis__remember" in opts.allowed_tools and "WebSearch" in opts.allowed_tools
     assert opts.tools == ["WebSearch", "WebFetch"] and opts.setting_sources == []
     assert opts.include_partial_messages and opts.model == "claude-opus-5"
@@ -627,7 +627,7 @@ def test_voice_loop_submits_command_said_with_name(config, memory):
         level = 0.0
 
         def __init__(self):
-            self.heard = ["on regarde un film ce soir", "Orion, mets du rap"]
+            self.heard = ["on regarde un film ce soir", "Jarvis, mets du rap"]
 
         def record_utterance(self, start_timeout, max_seconds):
             return np.zeros(16000, dtype=np.int16)
@@ -646,3 +646,47 @@ def test_voice_loop_submits_command_said_with_name(config, memory):
     loop.listener.heard.pop(0)
     assert loop._called() == (True, "mets du rap")
     assert "par mon nom" in loop.activation_hint
+    # Après un changement de nom, c'est le nouveau nom qui le réveille.
+    loop.rename("Kali", [])
+    assert loop.listener.name == "Kali"
+    loop.listener.heard = ["Jarvis, mets du rap"]
+    assert loop._called() == (False, "")
+    loop.listener.heard = ["Kali, mets du rap"]
+    assert loop._called() == (True, "mets du rap")
+
+
+# ---------------------------------------------------------------- changer de nom à la voix
+
+def test_clean_name():
+    from jarvis.tools.identity_tools import clean_name
+
+    assert clean_name("  kali. ") == "Kali"
+    assert clean_name("« tony stark »") == "Tony Stark"
+    for bad in ["", "x", "R2D2!!", "un nom beaucoup beaucoup trop long pour un assistant", "a b c d"]:
+        with pytest.raises(ValueError):
+            clean_name(bad)
+
+
+def test_rename_by_voice_updates_everything(config, memory):
+    client = FakeClient(
+        response("tool_use", tool_use("t1", "rename_assistant", {"new_name": "kali", "aliases": ["Kaly"]})),
+        response("end_turn", text("C'est noté.")),
+    )
+    core = Core(config, memory=memory, client=client)
+    core.brain.confirm = lambda action: action == "changer mon nom en « kali »"
+
+    class Voice:
+        renamed = None
+
+        def rename(self, name, aliases):
+            Voice.renamed = (name, aliases)
+
+    core.voice = Voice()
+    old_session = core.brain.session_id
+    core.ask("À partir de maintenant tu t'appelles Kali", timeout=5)
+    assert config.assistant_name == "Kali"
+    assert Voice.renamed == ("Kali", ["Kaly"])
+    assert core.brain.session_id != old_session  # nouvelle conversation avec la nouvelle personnalité
+    assert "Tu es Kali" in core.brain.system[0]["text"]
+    # Conservé après un redémarrage, même si le .env dit autre chose.
+    assert Config().assistant_name == "Kali" and Config().name_aliases == ["Kaly"]

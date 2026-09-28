@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import threading
 import webbrowser
@@ -63,16 +62,10 @@ def _greeting(config: Config, now: datetime) -> str:
 
 def _first_launch_today(config: Config, now: datetime) -> bool:
     """Vrai au premier lancement de la journée (retenu dans ~/.jarvis/state.json)."""
-    path = config.home / "state.json"
-    try:
-        state = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        state = {}
     today = now.date().isoformat()
-    if state.get("last_start_day") == today:
+    if config.load_state().get("last_start_day") == today:
         return False
-    state["last_start_day"] = today
-    path.write_text(json.dumps(state), encoding="utf-8")
+    config.save_state(last_start_day=today)
     return True
 
 
