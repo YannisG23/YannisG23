@@ -8,7 +8,7 @@ Son cerveau est **Claude**, branché sur **ton abonnement Claude** (Pro ou Max) 
 
 | Domaine | Exemples |
 |---|---|
-| Conversation vocale | Tu l'appelles par son nom, au début ou à la fin de ta phrase (« Jarvis, quel temps demain ? », « … baisse le son, Jarvis »), puis tu enchaînes sans le rappeler. Il commence à parler dès la première phrase de sa réponse, et tu lui coupes la parole en l'appelant (ou Échap, ou le bouton ■). Tu peux le renommer à la voix : « Jarvis, à partir de maintenant tu t'appelles Kali ». |
+| Conversation vocale | Tu l'appelles par son nom, au début ou à la fin de ta phrase (« Jarvis, quel temps demain ? », « … baisse le son, Jarvis »), puis tu enchaînes sans le rappeler. Il commence à parler dès la première phrase de sa réponse, et tu lui coupes la parole en l'appelant (ou Échap, ou le bouton ■). Au premier lancement, **il choisit lui-même son nom** et te demande de valider. Ensuite tu peux le renommer à la voix (« à partir de maintenant tu t'appelles Kali ») ou lui redemander de choisir (« choisis-toi un nom »). |
 | Centre de commande | Une présence animée qui réagit à ta voix et à la sienne, avec ses paroles en sous-titres ; conversation en direct, état du PC, météo, agenda, e-mails, mémoire modifiable, tâches, minuteurs, journal des actions, boutons « Faire le point » et « Nouvelle conversation », palette de commandes et raccourcis clavier. |
 | Mémoire | Il retient seul ce qui compte (goûts, proches, projets, habitudes), retrouve les souvenirs utiles à chaque message et résume chaque conversation. Tu peux lui demander « de quoi on a parlé mardi ? ». |
 | Briefing | « Fais-moi le point » : date, météo, agenda du jour, e-mails importants, tâches. |
@@ -92,7 +92,7 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 | `JARVIS_VOICE` | Voix (`edge-tts --list-voices`) | `fr-FR-RemyMultilingualNeural` |
 | `JARVIS_VOICE_RATE` | Débit de parole | `+5%` |
 | `JARVIS_WHISPER_MODEL` | Précision de l'écoute : `base`, `small`, `medium`, `large-v3` | `small` |
-| `JARVIS_NAME` | Nom de l'assistant, et mot qui le réveille. Un nom donné à la voix l'emporte sur ce réglage. | `Jarvis` |
+| `JARVIS_NAME` | Impose un nom dès le départ (sinon il choisit le sien au premier lancement). Un nom donné à la voix l'emporte sur ce réglage. | `Jarvis` en attendant |
 | `JARVIS_NAME_ALIASES` | Autres orthographes du nom que la transcription pourrait écrire | vide |
 | `JARVIS_WAKE_MODE` | `nom` (l'appeler par son nom) ou `hey` (« Hey Jarvis », seule formule de ce mode, plus léger pour le PC) | `nom` |
 | `JARVIS_WAKE_THRESHOLD` | Sensibilité de « Hey Jarvis » en mode `hey` | `0.5` |

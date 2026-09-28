@@ -217,7 +217,8 @@ class Core:
 
     def _answer(self, job: Job) -> str:
         self.set_state("thinking")
-        self.bus.publish("user_message", {"text": job.text, "source": job.source})
+        if job.source != "system":  # une consigne interne n'apparaît pas comme si tu l'avais dite
+            self.bus.publish("user_message", {"text": job.text, "source": job.source})
         turn = next(self._confirm_ids)
         try:
             reply = self.brain.ask(

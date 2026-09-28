@@ -18,9 +18,12 @@ def clean_name(raw: str) -> str:
 
 
 @registry.tool(
-    "Change ton propre nom, quand l'utilisateur te le demande (« à partir de maintenant tu t'appelles Kali »). "
-    "Ce nom devient aussi le mot qui te réveille. Donne des orthographes proches dans aliases si le nom "
-    "risque d'être mal transcrit par la reconnaissance vocale (ex. Kali → Kaly).",
+    "Change ton propre nom, quand l'utilisateur te le demande (« à partir de maintenant tu t'appelles Kali ») "
+    "ou quand il te laisse le choisir (« choisis-toi un nom »). Dans ce cas, choisis celui qui te plaît "
+    "vraiment, et dis-lui pourquoi en une phrase. Ce nom devient aussi le mot qui te réveille : il doit être "
+    "facile à prononcer (deux syllabes idéalement), et ne pas être un mot courant en français ni un prénom "
+    "très répandu. Donne des orthographes proches dans aliases si le nom risque d'être mal transcrit par la "
+    "reconnaissance vocale (ex. Kali → Kaly). L'utilisateur confirme toujours avant le changement.",
     properties={
         "new_name": {"type": "string", "description": "Le nouveau nom, tel qu'il s'écrit."},
         "aliases": {
@@ -30,7 +33,7 @@ def clean_name(raw: str) -> str:
         },
     },
     required=["new_name"],
-    confirm=lambda args: f"changer mon nom en « {args.get('new_name', '').strip()} »",
+    confirm=lambda args: f"prendre le nom « {args.get('new_name', '').strip()} »",
 )
 def rename_assistant(ctx: ToolContext, new_name: str, aliases: list | None = None) -> str:
     name = clean_name(new_name)

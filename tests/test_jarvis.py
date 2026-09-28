@@ -673,7 +673,7 @@ def test_rename_by_voice_updates_everything(config, memory):
         response("end_turn", text("C'est noté.")),
     )
     core = Core(config, memory=memory, client=client)
-    core.brain.confirm = lambda action: action == "changer mon nom en « kali »"
+    core.brain.confirm = lambda action: action == "prendre le nom « kali »"
 
     class Voice:
         renamed = None
@@ -690,3 +690,20 @@ def test_rename_by_voice_updates_everything(config, memory):
     assert "Tu es Kali" in core.brain.system[0]["text"]
     # Conservé après un redémarrage, même si le .env dit autre chose.
     assert Config().assistant_name == "Kali" and Config().name_aliases == ["Kaly"]
+
+
+def test_first_launch_lets_the_assistant_choose_its_name(config, memory, monkeypatch):
+    from jarvis.app import NAMING_PROMPT, _needs_name
+
+    monkeypatch.delenv("JARVIS_NAME", raising=False)
+    assert _needs_name(config)
+    config.save_state(naming_done=True)
+    assert not _needs_name(config)  # une seule fois
+    config.save_state(naming_done=False)
+    monkeypatch.setenv("JARVIS_NAME", "Friday")
+    assert not _needs_name(config)  # nom imposé dans .env
+    # La consigne interne ne s'affiche pas comme un message de l'utilisateur.
+    core = Core(config, memory=memory, client=FakeClient(response("end_turn", text("Je m'appelle Vega."))))
+    core.ask(NAMING_PROMPT.format(user="Yannis"), source="system", timeout=5)
+    kinds = [e["type"] for e in core.bus.history]
+    assert "user_message" not in kinds and "assistant_message" in kinds

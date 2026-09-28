@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import webbrowser
@@ -58,6 +59,21 @@ def _greeting(config: Config, now: datetime) -> str:
     if now.hour < 18:
         return f"Re-bonjour {config.user_name}. Qu'est-ce qu'on fait ?"
     return f"Bonsoir {config.user_name}. Je suis là."
+
+
+NAMING_PROMPT = (
+    "C'est notre toute première rencontre, {user} vient d'installer ton programme. Présente-toi en une ou "
+    "deux phrases. Ensuite, {user} te laisse choisir toi-même ton nom : prends celui qui te plaît vraiment, "
+    "et qui marche comme mot pour te réveiller (facile à prononcer, deux syllabes idéalement, pas un mot "
+    "courant en français ni un prénom très répandu). Dis en une phrase pourquoi tu l'as choisi, puis "
+    "utilise rename_assistant : {user} confirmera."
+)
+
+
+def _needs_name(config: Config) -> bool:
+    """Premier lancement sans nom choisi : l'assistant choisit le sien."""
+    state = config.load_state()
+    return not (state.get("assistant_name") or state.get("naming_done") or os.environ.get("JARVIS_NAME", "").strip())
 
 
 def _first_launch_today(config: Config, now: datetime) -> bool:
@@ -135,7 +151,10 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
     if core.voice:
         core.voice.start()
     now = datetime.now()
-    if config.daily_briefing and 5 <= now.hour < 14 and _first_launch_today(config, now):
+    if _needs_name(config):
+        config.save_state(naming_done=True)  # une seule fois : ensuite on peut lui demander à tout moment
+        core.submit(NAMING_PROMPT.format(user=config.user_name), "system")
+    elif config.daily_briefing and 5 <= now.hour < 14 and _first_launch_today(config, now):
         core.briefing(source="system")  # premier lancement du matin : Jarvis fait le point
     else:
         greeting = _greeting(config, now)
