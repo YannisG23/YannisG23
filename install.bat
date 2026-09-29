@@ -34,12 +34,23 @@ if not exist .env (
 )
 
 echo.
+call :claude_exe
 python -m jarvis --login
 echo.
 python -m jarvis --doctor
 echo.
 echo Installation terminee. Double-clique sur jarvis.bat pour lancer ton assistant.
 pause
+exit /b 0
+
+:claude_exe
+rem Il faut un vrai claude.exe : le kit de Claude refuse le script claude.cmd installe par npm.
+python -c "from jarvis.brain_subscription import find_claude_cli as f; import sys; sys.exit(0 if f() else 1)" >nul 2>nul
+if errorlevel 1 (
+  echo Installation de Claude Code pour Windows, necessaire pour parler a Claude...
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"
+  echo.
+)
 exit /b 0
 
 :error

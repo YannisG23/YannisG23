@@ -78,8 +78,10 @@ def _api(config: Config) -> Callable[[], str]:
 
 
 def _subscription() -> str:
-    from .brain_subscription import auth_status
+    from .brain_subscription import auth_status, find_claude_cli
 
+    if not find_claude_cli():
+        raise RuntimeError("Claude Code pour Windows (claude.exe) introuvable : double-clique sur connexion.bat")
     status = auth_status()
     if not status.get("loggedIn"):
         raise RuntimeError("compte Claude non connecté")

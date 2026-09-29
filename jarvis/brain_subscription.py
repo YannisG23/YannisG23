@@ -27,17 +27,44 @@ from .brain import CONSOLIDATION_SCHEMA, Brain, BrainError, Interrupted, Sentenc
 
 SERVER = "jarvis"
 WEB_TOOLS = ["WebSearch", "WebFetch"]
+MISSING_CLI = ("Il me manque Claude Code pour Windows. Ferme-moi, double-clique sur connexion point bat : "
+               "il l'installe et connecte ton compte. Ensuite relance-moi.")
+
+
+def _claude_candidates() -> list[Path]:
+    windows = platform.system() == "Windows"
+    name = "claude.exe" if windows else "claude"
+    candidates: list[Path] = []
+    try:
+        import claude_agent_sdk
+
+        candidates.append(Path(claude_agent_sdk.__file__).parent / "_bundled" / name)
+    except ImportError:
+        pass
+    # Installation officielle (irm https://claude.ai/install.ps1 | iex, ou curl … | bash).
+    candidates.append(Path.home() / ".local" / "bin" / name)
+    if windows:
+        # Certaines versions npm embarquent aussi un vrai claude.exe dans leurs dossiers.
+        npm = Path(os.environ.get("APPDATA", "")) / "npm" / "node_modules" / "@anthropic-ai"
+        if npm.is_dir():
+            candidates += sorted(npm.rglob("claude.exe"))
+    found = shutil.which("claude")
+    if found:
+        candidates.append(Path(found))
+    return candidates
 
 
 def find_claude_cli() -> str | None:
-    """Le Claude Code livré avec claude-agent-sdk, sinon celui installé sur le système."""
-    try:
-        import claude_agent_sdk
-    except ImportError:
-        return shutil.which("claude")
-    name = "claude.exe" if platform.system() == "Windows" else "claude"
-    bundled = Path(claude_agent_sdk.__file__).parent / "_bundled" / name
-    return str(bundled) if bundled.is_file() else shutil.which("claude")
+    """Un Claude Code exécutable directement.
+
+    Sous Windows, seul un vrai claude.exe convient : le kit de Claude refuse, par sécurité,
+    le script claude.cmd qu'installe npm.
+    """
+    windows = platform.system() == "Windows"
+    for path in _claude_candidates():
+        if path.is_file() and (not windows or path.suffix.lower() == ".exe"):
+            return str(path)
+    return None
 
 
 def _cli_env() -> dict[str, str]:
@@ -51,7 +78,7 @@ def login() -> int:
     """Connecte ton compte Claude (Pro/Max) : ouvre le navigateur pour t'identifier."""
     cli = find_claude_cli()
     if not cli:
-        print("Claude Code introuvable : relance l'installation (install.bat).")
+        print("Claude Code (claude.exe) introuvable : double-clique sur connexion.bat, il l'installe.")
         return 1
     try:
         if auth_status().get("loggedIn"):
@@ -176,6 +203,7 @@ class SubscriptionBrain(Brain):
             cwd=str(self.config.home),
             max_turns=self.config.max_tool_steps + 5,
             stderr=self._stderr.append,
+            cli_path=find_claude_cli(),
         )
 
     def _make_handler(self, name: str) -> Callable[[dict], Any]:
@@ -205,8 +233,9 @@ class SubscriptionBrain(Brain):
                 raise
             except Exception as exc:
                 name = type(exc).__name__
-                if name == "CLINotFoundError":
-                    raise BrainError("Je ne trouve pas Claude Code. Relance l'installation avec install point bat.") from exc
+                if name == "CLINotFoundError" or "batch script" in str(exc):
+                    self._report(exc)
+                    raise BrainError(MISSING_CLI) from exc
                 if name not in {"ProcessError", "CLIConnectionError"}:
                     raise
                 self._client = None  # on repartira sur une connexion neuve
@@ -224,6 +253,8 @@ class SubscriptionBrain(Brain):
     async def _turn(self, prompt: str, on_sentence, on_delta) -> str:
         sdk = self.sdk
         if self._client is None:
+            if find_claude_cli() is None:
+                raise BrainError(MISSING_CLI)
             self._client = sdk.ClaudeSDKClient(options=self._options())
             await self._client.connect()
         await self._client.query(prompt)
@@ -331,6 +362,7 @@ class SubscriptionBrain(Brain):
             output_format={"type": "json_schema", "schema": CONSOLIDATION_SCHEMA},
             cwd=str(self.config.home),
             max_turns=3,
+            cli_path=find_claude_cli(),
         )
         data = None
         async for message in self.sdk.query(prompt=prompt, options=options):

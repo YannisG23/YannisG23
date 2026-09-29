@@ -743,3 +743,17 @@ def test_first_launch_lets_the_assistant_choose_its_name(config, memory, monkeyp
     core.ask(NAMING_PROMPT.format(user="Yannis"), source="system", timeout=5)
     kinds = [e["type"] for e in core.bus.history]
     assert "user_message" not in kinds and "assistant_message" in kinds
+
+
+def test_find_claude_cli_rejects_windows_cmd_shim(tmp_path, monkeypatch):
+    from jarvis import brain_subscription as bs
+
+    shim = tmp_path / "claude.CMD"
+    shim.write_text("@echo off")
+    native = tmp_path / "claude.exe"
+    monkeypatch.setattr(bs.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(bs, "_claude_candidates", lambda: [shim])
+    assert bs.find_claude_cli() is None  # le script npm est refusé par le kit de Claude
+    native.write_text("")
+    monkeypatch.setattr(bs, "_claude_candidates", lambda: [shim, native])
+    assert bs.find_claude_cli() == str(native)
