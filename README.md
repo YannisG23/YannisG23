@@ -47,6 +47,7 @@ python -m jarvis --login    # connecte ton compte Claude (une seule fois)
 python -m jarvis --doctor   # vérifie tout : compte Claude, micro, haut-parleurs, voix, Whisper, Google
 python -m jarvis            # voix + centre de commande (s'ouvre dans le navigateur)
 python -m jarvis --text     # sans micro ni voix : clavier + centre de commande
+python -m jarvis --micros   # liste les micros et haut-parleurs (à choisir dans .env)
 python -m jarvis --memory   # voir ce que Jarvis a retenu de toi
 ```
 
@@ -136,6 +137,7 @@ Ce mode abonnement est prévu pour **ton usage personnel**, sur ton PC et avec t
 
 ## Dépannage
 
+- **Il n'utilise pas le bon micro ou le bon casque** : `python -m jarvis --micros` affiche la liste numérotée, puis mets dans `.env` par exemple `JARVIS_MIC=Yeti` ou `JARVIS_SPEAKERS=3` (un numéro ou un bout du nom).
 - **Il ne réagit pas quand tu l'appelles** : dis son nom au début ou à la fin de ta phrase, bien détaché. Si la transcription l'écrit autrement (visible dans le terminal), ajoute cette orthographe dans `JARVIS_NAME_ALIASES`. Tu peux aussi cliquer sur le micro, ou appuyer sur Espace dans le centre de commande.
 - **Le PC rame quand il écoute** : en mode `nom`, il transcrit ce qui se dit autour du micro pour repérer son nom. Sur un PC sans carte graphique NVIDIA, passe en `JARVIS_WAKE_MODE=hey` : tu diras alors « Hey Jarvis » (seule formule disponible dans ce mode), bien plus léger.
 - **Il s'entend parler** : utilise un casque, ou baisse le volume des haut-parleurs.

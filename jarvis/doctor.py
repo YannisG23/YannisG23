@@ -207,6 +207,10 @@ def run_doctor(config: Config) -> int:
                            _imports(["sounddevice", "faster_whisper", "edge_tts", "miniaudio"]),
                            'pip install -e ".[voice]" (sous Linux : sudo apt install libportaudio2)')
     if voice_libs:
+        from .voice.devices import apply as apply_devices
+
+        for warning in apply_devices(config.mic_device, config.speaker_device):
+            console.print(f"    [yellow]{escape(warning)}[/]")
         check.run("Voix neuronale (internet)", lambda: _edge_voice(config),
                   "Pas d'accès à la voix en ligne : il utilisera la voix du système (pyttsx3).",
                   optional=True)
@@ -215,9 +219,11 @@ def run_doctor(config: Config) -> int:
                       "Vérifie ELEVENLABS_API_KEY (elevenlabs.io → Profile → API keys). "
                       "Sans elle, il utilise la voix gratuite.", optional=True)
         check.run("Haut-parleurs", lambda: _voice(config),
-                  "Vérifie la sortie audio par défaut de ton système.")
+                  "Vérifie la sortie audio par défaut de ton système, ou choisis-en une : "
+                  "python -m jarvis --micros puis JARVIS_SPEAKERS=<numéro> dans .env.")
         check.run("Micro", _microphone,
-                  "Vérifie le micro par défaut et, sur Mac, l'autorisation Micro pour ton terminal.")
+                  "Ce n'est peut-être pas le bon micro : python -m jarvis --micros pour voir la liste, "
+                  "puis JARVIS_MIC=<numéro ou bout du nom> dans .env. Sur Mac, autorise le micro pour ton terminal.")
         check.run("Reconnaissance vocale (Whisper)", lambda: _whisper(config),
                   "Le premier chargement télécharge le modèle : il faut internet. "
                   "Essaie JARVIS_WHISPER_MODEL=base si ton PC est lent.")

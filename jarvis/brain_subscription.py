@@ -145,7 +145,8 @@ class SubscriptionBrain(Brain):
         self._model: str | None = config.model if config.model_is_explicit else None
         self._ids = itertools.count(1)
         self._loop = asyncio.new_event_loop()
-        threading.Thread(target=self._loop.run_forever, daemon=True, name="jarvis-claude-code").start()
+        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True, name="jarvis-claude-code")
+        self._thread.start()
         super().__init__(config, memory, registry, client=_NoApiClient(), confirm=confirm,
                          notify=notify, on_event=on_event)
         self._tool_handlers = {name: self._make_handler(name) for name in sorted(registry.tools)}
@@ -357,7 +358,7 @@ class SubscriptionBrain(Brain):
             system_prompt="Tu résumes des conversations pour la mémoire long terme d'un assistant personnel.",
             tools=[],
             setting_sources=[],
-            model=self.config.model,
+            model=self._model,
             effort="low",
             output_format={"type": "json_schema", "schema": CONSOLIDATION_SCHEMA},
             cwd=str(self.config.home),
@@ -371,9 +372,28 @@ class SubscriptionBrain(Brain):
         return data
 
     def close(self) -> None:
+        """Ferme Claude Code proprement, sans jamais bloquer la sortie plus de quelques secondes."""
+        if self._loop.is_closed():
+            return
         if self._client is not None:
             try:
-                self._run(self._client.disconnect(), timeout=10)
+                self._run(self._client.disconnect(), timeout=5)
             except Exception:
                 pass
+            self._client = None
+
+        async def cancel_pending() -> None:
+            tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+            for task in tasks:
+                task.cancel()
+            await asyncio.wait(tasks, timeout=3) if tasks else None
+            await self._loop.shutdown_asyncgens()
+
+        try:
+            self._run(cancel_pending(), timeout=5)
+        except Exception:
+            pass
         self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join(timeout=3)
+        if not self._thread.is_alive():
+            self._loop.close()

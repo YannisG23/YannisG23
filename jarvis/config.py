@@ -63,6 +63,9 @@ class Config:
     whisper_model: str = field(default_factory=lambda: _env("JARVIS_WHISPER_MODEL", "small"))
     wake_threshold: float = field(default_factory=lambda: float(_env("JARVIS_WAKE_THRESHOLD", "0.5")))
     follow_up_seconds: float = field(default_factory=lambda: float(_env("JARVIS_FOLLOW_UP_SECONDS", "6")))
+    # Micro et sortie audio : vide = ceux par défaut de Windows ; sinon un numéro ou un bout du nom.
+    mic_device: str = field(default_factory=lambda: _env("JARVIS_MIC", ""))
+    speaker_device: str = field(default_factory=lambda: _env("JARVIS_SPEAKERS", ""))
 
     # Centre de commande
     dashboard_port: int = field(default_factory=lambda: int(_env("JARVIS_DASHBOARD_PORT", "8765")))

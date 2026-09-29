@@ -125,6 +125,13 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
     speaker = None
     if voice:
         try:
+            from .voice.devices import apply as apply_devices
+
+            for warning in apply_devices(config.mic_device, config.speaker_device):
+                console.print(f"[yellow]{escape(warning)}[/]")
+        except Exception:
+            pass  # pas de sounddevice : la voix sera signalée indisponible juste après
+        try:
             from .voice.speak import Speaker
 
             if config.tts_engine == "elevenlabs" and not config.elevenlabs_api_key:

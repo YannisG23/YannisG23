@@ -1,4 +1,4 @@
-"""Point d'entrée : python -m jarvis [--text] [--login] [--doctor] [--no-dashboard] [--no-browser] [--setup-google] [--memory]."""
+"""Point d'entrée : python -m jarvis [--text] [--login] [--doctor] [--no-dashboard] [--no-browser] [--setup-google] [--memory] [--micros]."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ def main() -> None:
     parser.add_argument("--setup-google", action="store_true", help="connecter Gmail et Google Agenda")
     parser.add_argument("--memory", action="store_true", help="afficher ce que l'assistant sait de toi")
     parser.add_argument("--login", action="store_true", help="connecter ton compte Claude (abonnement)")
+    parser.add_argument("--micros", action="store_true", help="lister les micros et haut-parleurs disponibles")
     parser.add_argument("--doctor", action="store_true", help="vérifier l'installation (clé, micro, voix...)")
     args = parser.parse_args()
     config = Config()
@@ -26,6 +27,11 @@ def main() -> None:
         from .brain_subscription import login
 
         raise SystemExit(login())
+    if args.micros:
+        from .voice.devices import describe
+
+        print(describe())
+        return
     if args.doctor:
         from .doctor import run_doctor
 

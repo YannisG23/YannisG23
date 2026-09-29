@@ -337,13 +337,28 @@ class Core:
                 where = f", {event['location']}" if event["location"] else ""
                 self.notify(f"{event['title']} commence dans {minutes} minutes{where}.")
 
-    def shutdown(self) -> None:
-        """Consolide la conversation en cours avant de quitter."""
+    def shutdown(self, consolidate_timeout: float = 60) -> None:
+        """Consolide la conversation en cours avant de quitter, sans jamais bloquer indéfiniment."""
         self._running = False
+        self.brain.interrupt()
         if self.brain.turns:
+            done = threading.Event()
+
+            def consolidate() -> None:
+                try:
+                    self.brain.consolidate()
+                except Exception:
+                    pass
+                finally:
+                    done.set()
+
+            threading.Thread(target=consolidate, daemon=True, name="jarvis-consolidation").start()
             try:
-                self.brain.consolidate()
-            except Exception:
-                pass
-        self.brain.close()
+                done.wait(consolidate_timeout)
+            except KeyboardInterrupt:
+                pass  # Ctrl+C pendant le rangement : on quitte tout de suite
+        try:
+            self.brain.close()
+        except Exception:
+            pass
         self.memory.close()

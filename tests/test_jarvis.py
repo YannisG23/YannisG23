@@ -833,3 +833,33 @@ def test_brain_learns_routine_by_voice(config, memory):
     core.ask("Apprends cette routine : mode lecture, musique classique puis 45 minutes de lecture", timeout=5)
     assert (config.home / "routines" / "mode-lecture.md").exists()
     assert "run_routine" in core.brain.system[0]["text"]
+
+
+# ---------------------------------------------------------------- périphériques audio et arrêt
+
+def test_audio_device_resolution(monkeypatch):
+    from jarvis.voice import devices
+
+    fake = [
+        {"index": 0, "name": "Microsoft Sound Mapper - Input", "max_input_channels": 2, "max_output_channels": 0},
+        {"index": 1, "name": "Micro (Blue Yeti)", "max_input_channels": 1, "max_output_channels": 0},
+        {"index": 2, "name": "Casque (HyperX Cloud)", "max_input_channels": 0, "max_output_channels": 2},
+    ]
+    monkeypatch.setattr(devices, "_devices", lambda: fake)
+    assert devices.resolve("", "input") is None
+    assert devices.resolve("yeti", "input") == 1
+    assert devices.resolve("1", "input") == 1
+    assert devices.resolve("hyperx", "output") == 2
+    with pytest.raises(ValueError):
+        devices.resolve("hyperx", "input")  # un casque sans micro n'est pas une entrée
+    with pytest.raises(ValueError):
+        devices.resolve("7", "output")
+
+
+def test_shutdown_never_hangs_on_slow_consolidation(config, memory):
+    core = Core(config, memory=memory, client=FakeClient())
+    core.brain.messages.append({"role": "user", "content": "Salut"})
+    core.brain.consolidate = lambda: time.sleep(30)
+    start = time.monotonic()
+    core.shutdown(consolidate_timeout=0.2)
+    assert time.monotonic() - start < 5
