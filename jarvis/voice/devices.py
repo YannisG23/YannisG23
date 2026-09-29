@@ -15,6 +15,15 @@ def _devices() -> list[dict[str, Any]]:
     return [dict(d, index=i) for i, d in enumerate(sd.query_devices())]
 
 
+def _default_hostapi() -> int:
+    try:
+        import sounddevice as sd
+
+        return int(sd.default.hostapi)
+    except Exception:
+        return 0
+
+
 def resolve(spec: str, kind: str) -> int | None:
     """Trouve le périphérique demandé. kind = « input » ou « output ». None = défaut du système."""
     spec = (spec or "").strip()
@@ -29,6 +38,9 @@ def resolve(spec: str, kind: str) -> int | None:
         raise ValueError(f"aucun périphérique {'d’entrée' if kind == 'input' else 'de sortie'} n° {index}")
     wanted = spec.lower()
     matches = [d for d in candidates if wanted in d["name"].lower()]
+    # Windows liste chaque appareil plusieurs fois (MME, DirectSound, WASAPI…) : on préfère
+    # la version de l'API par défaut, qui accepte le 16 kHz de Whisper sans broncher.
+    matches.sort(key=lambda d: d.get("hostapi", 0) != _default_hostapi())
     if not matches:
         raise ValueError(f"aucun périphérique ne contient « {spec} » dans son nom "
                          "(liste : python -m jarvis --micros)")
@@ -58,13 +70,16 @@ def describe() -> str:
     import sounddevice as sd
 
     default_in, default_out = sd.default.device
+    hostapi = _default_hostapi()
+    # Une seule ligne par appareil : celle de l'API audio par défaut (les autres sont des doublons).
+    devices = [d for d in _devices() if d.get("hostapi", hostapi) == hostapi] or _devices()
     lines = ["Micros :"]
-    for d in _devices():
+    for d in devices:
         if d["max_input_channels"] > 0:
             mark = "  ← par défaut" if d["index"] == default_in else ""
             lines.append(f"  {d['index']:>3}  {d['name']}{mark}")
     lines.append("\nHaut-parleurs / casques :")
-    for d in _devices():
+    for d in devices:
         if d["max_output_channels"] > 0:
             mark = "  ← par défaut" if d["index"] == default_out else ""
             lines.append(f"  {d['index']:>3}  {d['name']}{mark}")

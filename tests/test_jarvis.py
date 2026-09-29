@@ -845,7 +845,12 @@ def test_audio_device_resolution(monkeypatch):
         {"index": 1, "name": "Micro (Blue Yeti)", "max_input_channels": 1, "max_output_channels": 0},
         {"index": 2, "name": "Casque (HyperX Cloud)", "max_input_channels": 0, "max_output_channels": 2},
     ]
+    fake.append({"index": 3, "name": "Micro (Blue Yeti)", "max_input_channels": 1, "max_output_channels": 0,
+                 "hostapi": 2})
+    for d in fake[:3]:
+        d["hostapi"] = 0
     monkeypatch.setattr(devices, "_devices", lambda: fake)
+    monkeypatch.setattr(devices, "_default_hostapi", lambda: 0)
     assert devices.resolve("", "input") is None
     assert devices.resolve("yeti", "input") == 1
     assert devices.resolve("1", "input") == 1
