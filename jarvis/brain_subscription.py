@@ -10,6 +10,7 @@ Connexion (une seule fois) : python -m jarvis --login
 from __future__ import annotations
 
 import asyncio
+import collections
 import itertools
 import json
 import os
@@ -111,6 +112,10 @@ class SubscriptionBrain(Brain):
             os.environ.pop(var, None)
         self._client: Any = None
         self._turn_count = 0
+        # Dernières lignes d'erreur de Claude Code : indispensables pour comprendre un échec.
+        self._stderr: collections.deque[str] = collections.deque(maxlen=40)
+        # Sans modèle imposé dans .env, Claude Code prend celui de ton abonnement (Pro, Max…).
+        self._model: str | None = config.model if config.model_is_explicit else None
         self._ids = itertools.count(1)
         self._loop = asyncio.new_event_loop()
         threading.Thread(target=self._loop.run_forever, daemon=True, name="jarvis-claude-code").start()
@@ -151,20 +156,26 @@ class SubscriptionBrain(Brain):
     def _options(self) -> Any:
         persona, profile = (block["text"] for block in self.system)
         tool_names = [f"mcp__{SERVER}__{name}" for name in sorted(self.registry.tools)]
+        # Passé par fichier : avec une mémoire bien remplie, la ligne de commande dépasserait
+        # la longueur maximale autorisée par Windows.
+        prompt_file = self.config.home / "system_prompt.txt"
+        prompt_file.write_text(
+            f"{persona}\n\n{profile}\n\n"
+            "Pour la recherche et la lecture web, utilise les outils WebSearch et WebFetch.",
+            encoding="utf-8",
+        )
         return self.sdk.ClaudeAgentOptions(
-            system_prompt=(
-                f"{persona}\n\n{profile}\n\n"
-                "Pour la recherche et la lecture web, utilise les outils WebSearch et WebFetch."
-            ),
+            system_prompt={"type": "file", "path": str(prompt_file)},
             mcp_servers={SERVER: self._server},
             tools=WEB_TOOLS,
             allowed_tools=[*tool_names, *WEB_TOOLS],
             setting_sources=[],
-            model=self.config.model,
+            model=self._model,
             effort=self.config.effort,
             include_partial_messages=True,
             cwd=str(self.config.home),
             max_turns=self.config.max_tool_steps + 5,
+            stderr=self._stderr.append,
         )
 
     def _make_handler(self, name: str) -> Callable[[dict], Any]:
@@ -185,21 +196,26 @@ class SubscriptionBrain(Brain):
             on_delta: Callable[[str], None] | None = None) -> str:
         self._cancel = False
         prompt = f"[{spoken_timestamp(datetime.now())}] {text}{self._recall_block(text)}"
-        try:
-            reply = self._run(self._turn(prompt, on_sentence, on_delta))
-        except BrainError:
-            raise
-        except Exception as exc:
-            name = type(exc).__name__
-            if name == "CLINotFoundError":
-                raise BrainError("Je ne trouve pas Claude Code. Relance l'installation avec install point bat.") from exc
-            if name in {"ProcessError", "CLIConnectionError"}:
+        reply = ""
+        for attempt in (1, 2):
+            try:
+                reply = self._run(self._turn(prompt, on_sentence, on_delta))
+                break
+            except BrainError:
+                raise
+            except Exception as exc:
+                name = type(exc).__name__
+                if name == "CLINotFoundError":
+                    raise BrainError("Je ne trouve pas Claude Code. Relance l'installation avec install point bat.") from exc
+                if name not in {"ProcessError", "CLIConnectionError"}:
+                    raise
                 self._client = None  # on repartira sur une connexion neuve
-                raise BrainError(
-                    "Je n'arrive pas à joindre Claude. Vérifie ta connexion internet, "
-                    "ou reconnecte ton compte avec python -m jarvis --login."
-                ) from exc
-            raise
+                self._report(exc)
+                if attempt == 2:
+                    raise BrainError(self._diagnose()) from exc
+                # Deuxième essai : connexion neuve et modèle par défaut de l'abonnement
+                # (le modèle demandé n'est peut-être pas inclus dans ton offre).
+                self._model = None
         self._turn_count += 1
         self.memory.log("user", text, self.session_id)
         self.memory.log("assistant", reply, self.session_id)
@@ -266,6 +282,34 @@ class SubscriptionBrain(Brain):
                 if on_delta:
                     on_delta(text)
         return " ".join(t.strip() for t in final_texts if t.strip()) or "".join(streamed).strip()
+
+    def _report(self, exc: Exception) -> None:
+        """Garde une trace détaillée de l'échec (onglet Activité et ~/.jarvis/erreurs.log)."""
+        detail = f"{type(exc).__name__}: {exc}"
+        stderr = getattr(exc, "stderr", None) or "\n".join(self._stderr)
+        if stderr:
+            detail += "\n" + str(stderr)[-2000:]
+        self.emit("error", {"message": f"Détail technique : {detail}"})
+        try:
+            with open(self.config.home / "erreurs.log", "a", encoding="utf-8") as log:
+                log.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {detail}\n\n")
+        except OSError:
+            pass
+
+    def _diagnose(self) -> str:
+        """Message à dire, selon ce que Claude Code a répondu."""
+        text = "\n".join(self._stderr).lower()
+        try:
+            logged_in = auth_status().get("loggedIn", True)
+        except Exception:
+            logged_in = True
+        if not logged_in or any(w in text for w in ("not logged", "log in", "login", "unauthorized", "401", "oauth")):
+            return ("Ton compte Claude n'est pas connecté. Ferme-moi, double-clique sur connexion point bat, "
+                    "puis relance-moi.")
+        if any(w in text for w in ("usage limit", "rate limit", "quota")):
+            return "Tu as atteint la limite de ton abonnement Claude pour le moment. Réessaie un peu plus tard."
+        return ("Je n'arrive pas à joindre Claude. Vérifie ta connexion internet. Le détail de l'erreur est "
+                "dans l'onglet Activité du centre de commande.")
 
     def interrupt(self) -> None:
         self._cancel = True

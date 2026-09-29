@@ -73,7 +73,8 @@ class Dashboard:
             "name": config.assistant_name,
             "hint": core.voice.activation_hint if core.voice else "Mode clavier : écris ta demande ci-dessous",
             "user": config.user_name,
-            "model": config.model,
+            "model": (config.model if not config.uses_subscription or config.model_is_explicit
+                      else "celui de ton abonnement"),
             "effort": config.effort,
             "voice": config.tts_voice,
             "brain": "Abonnement Claude" if config.uses_subscription else "API Anthropic",

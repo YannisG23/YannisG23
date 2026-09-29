@@ -528,12 +528,48 @@ def test_subscription_brain_streams_and_uses_subscription(sub_brain, memory):
     assert "".join(deltas) == reply
     assert "ANTHROPIC_API_KEY" not in os.environ  # sinon Claude Code facturerait l'API
     opts = sdk.options[0]
-    assert "Tu es Jarvis" in opts.system_prompt and "guitare" in opts.system_prompt
+    # Personnalité et mémoire passent par un fichier (limite de longueur de ligne de commande sous Windows).
+    assert opts.system_prompt["type"] == "file"
+    prompt = open(opts.system_prompt["path"], encoding="utf-8").read()
+    assert "Tu es Jarvis" in prompt and "guitare" in prompt
     assert "mcp__jarvis__remember" in opts.allowed_tools and "WebSearch" in opts.allowed_tools
     assert opts.tools == ["WebSearch", "WebFetch"] and opts.setting_sources == []
-    assert opts.include_partial_messages and opts.model == "claude-opus-5"
+    # Sans JARVIS_MODEL dans .env, c'est le modèle de l'abonnement qui est utilisé.
+    assert opts.include_partial_messages and opts.model is None
     assert "] Salut" in sdk.prompts[0]
     assert brain.turns == 1 and brain.context_tokens == 4070
+
+
+def test_subscription_retries_then_explains_failure(sub_brain, monkeypatch):
+    from jarvis import brain_subscription
+    from jarvis.brain import BrainError
+
+    monkeypatch.setenv("JARVIS_MODEL", "claude-opus-5")
+    monkeypatch.setattr(brain_subscription, "auth_status", lambda: {"loggedIn": False})
+    events = []
+    brain, sdk = sub_brain([*_stream_text("Me revoilà."), _result()],
+                           on_event=lambda kind, data: events.append((kind, data)))
+    assert brain._model == "claude-opus-5"
+    failures = {"left": 1}
+    Client = sdk.ClaudeSDKClient
+
+    class Flaky(Client):
+        async def connect(self):
+            if failures["left"]:
+                failures["left"] -= 1
+                raise real_sdk.ProcessError("Command failed", exit_code=1, stderr="model not available")
+
+    sdk.ClaudeSDKClient = Flaky
+    # Premier échec : nouvel essai automatique, avec le modèle de l'abonnement.
+    assert brain.ask("Salut") == "Me revoilà."
+    assert brain._model is None and sdk.options[-1].model is None
+    assert any(k == "error" and "model not available" in d["message"] for k, d in events)
+    assert "model not available" in (brain.config.home / "erreurs.log").read_text(encoding="utf-8")
+    # Deux échecs de suite : message clair (ici, compte non connecté).
+    failures["left"] = 2
+    brain._client = None  # connexion perdue : il devra se reconnecter
+    with pytest.raises(BrainError, match="connexion point bat"):
+        brain.ask("Tu es là ?")
 
 
 def test_subscription_tools_run_with_confirmation(sub_brain, memory):

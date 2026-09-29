@@ -68,6 +68,7 @@ class Job:
     source: str = "text"  # "voice", "dashboard", "text", "system"
     done: threading.Event = field(default_factory=threading.Event)
     result: str = ""
+    ok: bool = True  # False si la réponse a échoué (Claude injoignable, erreur…)
 
 
 @dataclass
@@ -228,26 +229,23 @@ class Core:
             )
         except Interrupted:
             reply = "(interrompu)"
-        except BrainError as exc:
-            reply = str(exc)
-            self.say(reply)
-        except anthropic.AuthenticationError:
-            reply = "Ma clé d'API Anthropic est invalide. Vérifie ANTHROPIC_API_KEY dans le fichier point env."
-            self.say(reply)
-        except anthropic.RateLimitError:
-            reply = "Je suis limité en nombre de requêtes pour le moment. Réessaie dans une minute."
-            self.say(reply)
-        except anthropic.APIConnectionError:
-            reply = "Je n'arrive pas à joindre mes serveurs. Vérifie la connexion internet."
-            self.say(reply)
-        except anthropic.APIStatusError as exc:
-            reply = f"Petit souci côté serveur, erreur {exc.status_code}. Réessaie dans un instant."
-            self.say(reply)
-            self.bus.publish("error", {"message": str(exc)})
         except Exception as exc:
-            reply = "Quelque chose s'est mal passé de mon côté."
+            job.ok = False
+            if isinstance(exc, BrainError):
+                reply = str(exc)
+            elif isinstance(exc, anthropic.AuthenticationError):
+                reply = "Ma clé d'API Anthropic est invalide. Vérifie ANTHROPIC_API_KEY dans le fichier point env."
+            elif isinstance(exc, anthropic.RateLimitError):
+                reply = "Je suis limité en nombre de requêtes pour le moment. Réessaie dans une minute."
+            elif isinstance(exc, anthropic.APIConnectionError):
+                reply = "Je n'arrive pas à joindre mes serveurs. Vérifie la connexion internet."
+            elif isinstance(exc, anthropic.APIStatusError):
+                reply = f"Petit souci côté serveur, erreur {exc.status_code}. Réessaie dans un instant."
+                self.bus.publish("error", {"message": str(exc)})
+            else:
+                reply = "Quelque chose s'est mal passé de mon côté."
+                self.bus.publish("error", {"message": f"{type(exc).__name__}: {exc}"})
             self.say(reply)
-            self.bus.publish("error", {"message": f"{type(exc).__name__}: {exc}"})
         self.bus.publish("assistant_message", {"turn": turn, "text": reply})
         if self.brain.needs_consolidation:
             self._consolidate()

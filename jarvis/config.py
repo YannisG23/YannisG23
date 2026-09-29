@@ -104,6 +104,11 @@ class Config:
         self.state_file.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
 
     @property
+    def model_is_explicit(self) -> bool:
+        """Vrai si le modèle a été choisi dans .env (sinon l'abonnement choisit le sien)."""
+        return bool(os.environ.get("JARVIS_MODEL", "").strip())
+
+    @property
     def wake_by_name(self) -> bool:
         return self.wake_mode not in {"hey", "hey_jarvis", "openwakeword"}
 

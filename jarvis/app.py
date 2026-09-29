@@ -103,7 +103,25 @@ def _start_voice(config: Config, core: Core):
     return listener
 
 
+def _ensure_claude_login(config: Config) -> None:
+    """Mode abonnement : si le compte Claude n'est pas connecté, on le connecte avant de démarrer."""
+    if not config.uses_subscription:
+        return
+    try:
+        from .brain_subscription import auth_status, login
+
+        if auth_status().get("loggedIn"):
+            return
+    except Exception:
+        return  # on ne bloque pas le démarrage : l'erreur précise s'affichera à la première question
+    console.print(Panel("Ton compte Claude n'est pas encore connecté.\n"
+                        "Une page va s'ouvrir dans ton navigateur : connecte-toi avec ton compte Claude "
+                        "(Pro ou Max), puis reviens ici.", title="Connexion à Claude", border_style="yellow"))
+    login()
+
+
 def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser: bool = True) -> None:
+    _ensure_claude_login(config)
     speaker = None
     if voice:
         try:
@@ -152,8 +170,16 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
         core.voice.start()
     now = datetime.now()
     if _needs_name(config):
-        config.save_state(naming_done=True)  # une seule fois : ensuite on peut lui demander à tout moment
-        core.submit(NAMING_PROMPT.format(user=config.user_name), "system")
+        naming = core.submit(NAMING_PROMPT.format(user=config.user_name), "system")
+
+        def remember_naming() -> None:
+            # Une seule fois, mais seulement si la présentation a vraiment eu lieu
+            # (sinon on la retente au prochain lancement).
+            naming.done.wait()
+            if naming.ok:
+                config.save_state(naming_done=True)
+
+        threading.Thread(target=remember_naming, daemon=True).start()
     elif config.daily_briefing and 5 <= now.hour < 14 and _first_launch_today(config, now):
         core.briefing(source="system")  # premier lancement du matin : Jarvis fait le point
     else:

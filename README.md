@@ -28,7 +28,7 @@ Il te faut **Python 3.10 à 3.12** (Windows, macOS ou Linux), un micro, des haut
 
 ### En un clic
 
-- **Windows** : double-clique sur `install.bat`. Il installe tout, ouvre le fichier `.env` pour ton prénom et ta ville, te fait connecter ton compte Claude dans le navigateur, puis lance le diagnostic. Ensuite, lance Jarvis avec `jarvis.bat`.
+- **Windows** : double-clique sur `install.bat`. Il installe tout, ouvre le fichier `.env` pour ton prénom et ta ville, te fait connecter ton compte Claude dans le navigateur, puis lance le diagnostic. Ensuite, lance Jarvis avec `jarvis.bat`. Deux autres raccourcis : `connexion.bat` (reconnecter ton compte Claude) et `diagnostic.bat` (tout vérifier et afficher les dernières erreurs).
 - **macOS / Linux** : `./install.sh`, remplis `.env`, puis `./jarvis.sh`.
 
 ### À la main
@@ -126,7 +126,7 @@ Ce mode abonnement est prévu pour **ton usage personnel**, sur ton PC et avec t
 - **Linux** : il faut `portaudio` (`sudo apt install libportaudio2`). Pour le mot d'activation, `tflite-runtime` n'existe pas pour toutes les versions de Python : utilise Python 3.10 ou 3.11.
 - **macOS** : autorise, pour ton terminal, le micro, l'*Accessibilité* (touches média) et l'*Enregistrement de l'écran* (« regarde mon écran »).
 - **Port occupé** : change `JARVIS_DASHBOARD_PORT`.
-- **« Je n'arrive pas à joindre Claude »** : relance `python -m jarvis --login`, puis `python -m jarvis --doctor`.
+- **« Je n'arrive pas à joindre Claude »** : ferme-le, double-clique sur `connexion.bat`, puis relance `jarvis.bat`. Si ça continue, lance `diagnostic.bat` et envoie ce qu'il affiche : le détail de l'erreur s'y trouve (il est aussi dans l'onglet Activité et dans `~/.jarvis/erreurs.log`). Les commandes `python -m jarvis …` se tapent dans un terminal, pas dans le centre de commande.
 - **Il se coupe tout seul pendant qu'il parle** : il a cru s'entendre appeler dans sa propre voix. Utilise un casque, ou mets `JARVIS_BARGE_IN=0`.
 
 ## Architecture
