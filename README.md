@@ -82,6 +82,22 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 - **Journal** : tout est archivé et consultable (« qu'est-ce que je t'avais dit sur le voyage ? »).
 - Tout est stocké en local dans `~/.jarvis/memory.sqlite3`. Tu peux corriger, noter ou supprimer chaque souvenir depuis l'onglet **Mémoire** du centre de commande.
 
+## Routines
+
+Une routine est un enchaînement que Jarvis sait refaire à la demande : « **mode révision** », « lance ma **routine du matin** », « **mode soirée** ». Il lit les étapes et les accomplit avec ses outils (musique, minuteurs, tâches, mémoire, agenda).
+
+- Trois routines d'exemple sont installées au premier lancement : **mode révision** (couper les distractions, playlist de concentration, Pomodoro 25/5, il t'interroge sur tes cours), **routine du matin** (point du jour, musique, tâches du jour) et **mode soirée** (un film selon tes goûts, rappel pour aller dormir).
+- Apprends-lui les tiennes à la voix : « **apprends cette routine** : mode sport, mets une playlist énergique puis un minuteur de 30 minutes ». « Quelles sont mes routines ? » les liste ; la suppression demande confirmation.
+- Chaque routine est un simple fichier Markdown dans `~/.jarvis/routines/`, modifiable à la main :
+
+```markdown
+# Mode sport
+> Se motiver pour une séance.
+
+1. Lance une playlist énergique.
+2. Démarre un minuteur de 30 minutes.
+```
+
 ## Réglages (`.env`)
 
 | Variable | Rôle | Défaut |
@@ -154,7 +170,8 @@ jarvis/
     ├── file_tools.py    # fichiers
     ├── web_tools.py     # météo
     ├── google_tools.py  # Gmail et Agenda
-    └── memory_tools.py  # mémoire, conversations, tâches
+    ├── memory_tools.py  # mémoire, conversations, tâches
+    └── routine_tools.py # routines (~/.jarvis/routines/*.md)
 ```
 
 Pour ajouter une capacité, écris une fonction décorée avec `@registry.tool(...)` dans `jarvis/tools/` : Claude la découvre et l'utilise tout seul.

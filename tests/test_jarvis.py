@@ -757,3 +757,79 @@ def test_find_claude_cli_rejects_windows_cmd_shim(tmp_path, monkeypatch):
     native.write_text("")
     monkeypatch.setattr(bs, "_claude_candidates", lambda: [shim, native])
     assert bs.find_claude_cli() == str(native)
+
+
+# ---------------------------------------------------------------- routines
+
+def test_routines_examples_copied_once(config, memory):
+    from jarvis.tools import ToolContext
+    from jarvis.tools.routine_tools import routines_dir
+
+    ctx = ToolContext(config=config, memory=memory)
+    listing = registry.get("list_routines").run(ctx, {})
+    for title in ["Mode révision", "Routine du matin", "Mode soirée"]:
+        assert title in listing
+    folder = routines_dir(config)
+    assert (folder / "mode-revision.md").exists()
+    # Supprimées par l'utilisateur, les routines d'exemple ne reviennent pas.
+    for path in folder.glob("*.md"):
+        path.unlink()
+    assert "Aucune routine" in registry.get("list_routines").run(ctx, {})
+
+
+def test_run_routine_returns_steps(config, memory):
+    from jarvis.tools import ToolContext
+
+    ctx = ToolContext(config=config, memory=memory)
+    run = registry.get("run_routine")
+    for said in ["mode révision", "Mode Revision", "révision", "mode revison"]:
+        out = run.run(ctx, {"name": said})
+        assert "Mode révision" in out and "25 minutes" in out and "5 minutes" in out, said
+    assert "Aucune routine" in run.run(ctx, {"name": "karaoké"})
+
+
+def test_create_and_delete_routine(config, memory):
+    from jarvis.tools import ToolContext
+    from jarvis.tools.routine_tools import parse_routine, routines_dir
+
+    ctx = ToolContext(config=config, memory=memory)
+    create = registry.get("create_routine")
+    assert create.validate({"name": "x", "description": "y", "steps": "pas une liste"})
+    out = create.run(ctx, {"name": "Mode sport", "description": "Se motiver.",
+                           "steps": ["Lance une playlist énergique.", "  ", "Démarre un minuteur de 30 minutes."]})
+    assert "créée avec 2 étape(s)" in out
+    path = routines_dir(config) / "mode-sport.md"
+    routine = parse_routine("mode-sport", path.read_text(encoding="utf-8"))
+    assert routine.title == "Mode sport" and routine.description == "Se motiver."
+    assert routine.steps == ["Lance une playlist énergique.", "Démarre un minuteur de 30 minutes."]
+    assert "playlist énergique" in registry.get("run_routine").run(ctx, {"name": "sport"})
+    assert "mise à jour" in create.run(ctx, {"name": "mode sport", "description": "d", "steps": ["a"]})
+
+    delete = registry.get("delete_routine")
+    assert delete.confirm is not None
+    assert "mode sport" in delete.confirm({"name": "mode sport"})
+    assert "exactement" in delete.run(ctx, {"name": "sport"})  # pas de suppression approximative
+    assert "supprimée" in delete.run(ctx, {"name": "Mode sport"})
+    assert not path.exists()
+
+
+def test_parse_routine_accepts_hand_written_files():
+    from jarvis.tools.routine_tools import parse_routine
+
+    text = "# Mode ménage\n> Ranger vite.\n\n- Mets de la musique\n* Minuteur de 15 minutes\n  pour chaque pièce\nFélicite-moi"
+    r = parse_routine("mode-menage", text)
+    assert r.title == "Mode ménage" and r.description == "Ranger vite."
+    assert r.steps == ["Mets de la musique", "Minuteur de 15 minutes pour chaque pièce", "Félicite-moi"]
+
+
+def test_brain_learns_routine_by_voice(config, memory):
+    client = FakeClient(
+        response("tool_use", tool_use("t1", "create_routine", {
+            "name": "Mode lecture", "description": "Lire au calme.",
+            "steps": ["Lance de la musique classique.", "Minuteur de 45 minutes."]})),
+        response("end_turn", text("C'est retenu.")),
+    )
+    core = Core(config, memory=memory, client=client)
+    core.ask("Apprends cette routine : mode lecture, musique classique puis 45 minutes de lecture", timeout=5)
+    assert (config.home / "routines" / "mode-lecture.md").exists()
+    assert "run_routine" in core.brain.system[0]["text"]
