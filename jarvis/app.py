@@ -17,7 +17,12 @@ from .config import Config
 from .core import Core, is_yes
 
 console = Console()
-_EXIT = re.compile(r"^\W*(quit|exit|au revoir|bonne nuit|éteins-toi|arrête-toi)\W*(jarvis)?\W*$", re.I)
+# « quitter », « au revoir Nova »… : le nom éventuel après la formule est ignoré, quel qu'il soit.
+_EXIT = re.compile(
+    r"^\W*(quit|quitter|exit|sortir|au revoir|bonne nuit|[ée]teins[- ]toi|arr[êe]te[- ]toi|ferme[- ]toi)"
+    r"\W*(\w+)?\W*$",
+    re.I,
+)
 
 
 def _print_events(core: Core, pending: dict) -> None:

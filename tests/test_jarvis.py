@@ -863,3 +863,12 @@ def test_shutdown_never_hangs_on_slow_consolidation(config, memory):
     start = time.monotonic()
     core.shutdown(consolidate_timeout=0.2)
     assert time.monotonic() - start < 5
+
+
+def test_exit_phrases():
+    from jarvis.app import _EXIT
+
+    for phrase in ("quitter", "Quit", "au revoir", "Au revoir Nova !", "eteins-toi", "arrête-toi Jarvis", "ferme-toi"):
+        assert _EXIT.match(phrase), phrase
+    for phrase in ("stop", "quitte pas", "au revoir à tous les deux", "quelle heure est-il"):
+        assert not _EXIT.match(phrase), phrase
