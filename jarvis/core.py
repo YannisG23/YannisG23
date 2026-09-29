@@ -299,7 +299,8 @@ class Core:
         last = (0.0, 0.0)
         while self._running:
             time.sleep(0.07)
-            mic = min(1.0, self.voice.listener.level / 3000.0) if self.voice else 0.0
+            listener = getattr(self.voice, "listener", None)
+            mic = min(1.0, float(getattr(listener, "level", 0.0)) / 3000.0)
             out = float(getattr(self.speaker, "level", 0.0) or 0.0)
             current = (round(mic, 2), round(out, 2))
             if current != last and (max(current) > 0.01 or max(last) > 0.01):

@@ -26,6 +26,8 @@ const TOOL_LABELS = {
   gmail_list: "Je regarde tes e-mails", gmail_read: "Je lis l'e-mail", gmail_send: "J'envoie l'e-mail",
   calendar_list: "Je regarde ton agenda", calendar_create: "J'ajoute à l'agenda", calendar_delete: "Je retire de l'agenda",
   rename_assistant: "Je change de nom",
+  list_routines: "Tes routines", run_routine: "Je lance la routine", create_routine: "Routine apprise",
+  delete_routine: "Routine supprimée",
 };
 const SUGGESTIONS = [
   "Fais-moi le point sur ma journée",
