@@ -19,7 +19,8 @@ Jarvis est l'assistant vocal personnel de Yannis (Python, dossier `jarvis/`). Pl
 2. Yannis est débutant et parle français : on lui écrit en français simple. Une commande à taper est donnée en entier, en précisant le terminal (PowerShell ou cmd ; `irm` n'existe que dans PowerShell ; dans cmd, `cd /d J:\...` pour changer de disque).
 3. On ne touche jamais au fichier `.env` ni à `%USERPROFILE%\.jarvis` (mémoire, état, nom choisi) sans l'accord explicite de Yannis.
 4. Pas de pull request sans demande de Yannis. Les commits se terminent par les lignes d'attribution demandées par la session.
-5. Avant de pousser : `PYTHONPATH=. .venv/bin/python -m pytest -q tests` (ou `.venv\Scripts\python -m pytest -q tests` sous Windows) doit passer. Chaque correction ajoute un test quand c'est possible.
+5. Le quota de l'abonnement est partagé avec Jarvis lui-même : les sessions PC tournent avec Sonnet, une seule session PC à la fois, missions courtes. Les suivis automatiques (send_later) sont autorisés mais espacés (10 à 20 min).
+6. Avant de pousser : `PYTHONPATH=. .venv/bin/python -m pytest -q tests` (ou `.venv\Scripts\python -m pytest -q tests` sous Windows) doit passer. Chaque correction ajoute un test quand c'est possible.
 
 ## Sur le PC (sessions PC)
 
