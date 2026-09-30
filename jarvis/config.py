@@ -10,7 +10,9 @@ from pathlib import Path
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    # override=True : le fichier .env l'emporte sur une variable Windows du même nom
+    # (ex. une ancienne OPENAI_API_KEY enregistrée pour un autre outil).
+    load_dotenv(override=True)
 except ImportError:  # python-dotenv est optionnel
     pass
 
