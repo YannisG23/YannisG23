@@ -75,6 +75,10 @@ Codex, l'IA de code d'OpenAI, sert de **deuxième cerveau** : « demande l'avis 
 
 Deux usages : un avis ou une analyse en **lecture seule** (sans confirmation), ou une **tâche qui modifie des fichiers** dans un dossier précis, toujours après ta confirmation.
 
+### Relier le PC à l'équipe Claude en permanence
+
+`pont-claude.bat` lance `claude remote-control` dans ce dossier et le relance tout seul s'il se coupe. Double-clique une fois sur **demarrage-auto.bat** pour qu'il démarre à chaque ouverture de session Windows (fenêtre réduite). Pour l'enlever : Win+R, `shell:startup`, supprime « Pont Claude ».
+
 ### Raccourcis du centre de commande
 
 | Touche | Action |
