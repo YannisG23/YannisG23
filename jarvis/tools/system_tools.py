@@ -32,6 +32,8 @@ def _truncate(text: str, limit: int = 6000) -> str:
 )
 def open_application(name: str) -> str:
     name = name.strip()
+    if not name or any(ch in name for ch in '"&|<>^%\r\n`;$'):
+        return "Nom d'application invalide."
     if SYSTEM == "Darwin":
         result = subprocess.run(["open", "-a", name], capture_output=True, text=True)
         if result.returncode != 0:

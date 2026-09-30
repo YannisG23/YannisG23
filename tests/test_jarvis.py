@@ -877,3 +877,23 @@ def test_exit_phrases():
         assert _EXIT.match(phrase), phrase
     for phrase in ("stop", "quitte pas", "au revoir à tous les deux", "quelle heure est-il"):
         assert not _EXIT.match(phrase), phrase
+
+
+def test_open_application_refuse_injection_shell(monkeypatch):
+    from jarvis.tools import system_tools
+
+    monkeypatch.setattr(system_tools, "SYSTEM", "Windows")
+    lancé = []
+    monkeypatch.setattr(system_tools.subprocess, "Popen", lambda *a, **k: lancé.append(a))
+    assert "invalide" in system_tools.open_application('x" & calc & "')
+    assert not lancé
+    system_tools.open_application("Spotify")
+    assert len(lancé) == 1
+
+
+def test_open_path_refuse_les_executables(tmp_path):
+    from jarvis.tools import file_tools
+
+    script = tmp_path / "evil.bat"
+    script.write_text("echo hi")
+    assert "n'ouvre pas" in file_tools.open_path(str(script))

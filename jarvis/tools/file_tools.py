@@ -14,6 +14,12 @@ from .registry import registry
 _SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "AppData", "Library", ".cache"}
 
 
+# Ouvrir ces fichiers reviendrait à exécuter du code sans confirmation.
+_EXECUTABLE_EXT = {".exe", ".bat", ".cmd", ".com", ".scr", ".msi", ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse",
+                   ".wsf", ".wsh", ".hta", ".lnk", ".url", ".reg", ".jar", ".cpl", ".sh", ".command", ".app",
+                   ".desktop", ".pif", ".msc", ".py", ".pyw"}
+
+
 def _resolve(path: str) -> Path:
     return Path(os.path.expandvars(path)).expanduser().resolve()
 
@@ -117,6 +123,9 @@ def open_path(path: str) -> str:
     target = _resolve(path)
     if not target.exists():
         return f"Introuvable : {target}"
+    if target.suffix.lower() in _EXECUTABLE_EXT:
+        return (f"Je n'ouvre pas {target.name} : c'est un programme ou un script. "
+                "Pour le lancer, passe par run_command (avec confirmation).")
     system = platform.system()
     if system == "Windows":
         os.startfile(str(target))  # type: ignore[attr-defined]
