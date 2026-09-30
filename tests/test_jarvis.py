@@ -936,3 +936,39 @@ def test_core_worker_survit_a_une_erreur_de_consolidation(config, memory):
     core._consolidate = lambda: None
     good = core.new_conversation()
     assert good.done.wait(2) and good.ok  # le thread de travail tourne toujours
+
+
+def test_voice_loop_survit_a_une_erreur_audio():
+    from types import SimpleNamespace
+
+    from jarvis.voice.loop import VoiceLoop
+
+    events = []
+
+    class Listener:
+        name = "Jarvis"
+        has_wake_word = False
+        calls = 0
+
+        def flush(self):
+            pass
+
+        def listen(self, start_timeout):
+            Listener.calls += 1
+            if Listener.calls == 1:
+                raise OSError("micro débranché")
+            return "bonjour"
+
+    core = SimpleNamespace(
+        config=SimpleNamespace(assistant_name="Jarvis", name_aliases=[], wake_by_name=False, barge_in=False),
+        bus=SimpleNamespace(publish=lambda kind, data=None: events.append(kind)),
+        speaker=SimpleNamespace(wait=lambda timeout=0: None, speaking=False),
+        state="idle", set_state=lambda s: None, busy=False, awaiting_follow_up=False)
+    loop = VoiceLoop(core, Listener())
+    loop.start()
+    try:
+        assert loop.listen_once(timeout=1) == ""  # l'erreur ne bloque pas l'appelant
+        assert loop.listen_once(timeout=1) == "bonjour"  # et la boucle tourne toujours
+        assert "error" in events
+    finally:
+        loop.stop()

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -118,52 +119,62 @@ class VoiceLoop:
         return False, ""
 
     def _run(self) -> None:
-        core, listener = self.core, self.listener
+        """Un incident audio (micro débranché, Whisper qui échoue) ne doit pas rendre Jarvis sourd pour de bon."""
         while self._running:
             try:
-                request = self._requests.get_nowait()
-            except queue.Empty:
-                request = None
-            if request is not None:
+                self._step()
+            except Exception as exc:
+                self.core.bus.publish("error", {"message": f"Écoute : {type(exc).__name__}: {exc}"})
+                time.sleep(1)
+
+    def _step(self) -> None:
+        core, listener = self.core, self.listener
+        try:
+            request = self._requests.get_nowait()
+        except queue.Empty:
+            request = None
+        if request is not None:
+            try:
                 core.speaker.wait(timeout=30)
                 listener.flush()
                 request.text = self._listen(request.timeout)
+            finally:
                 request.done.set()
-                continue
+            return
 
-            if core.busy or core.speaker.speaking:
-                called, command = self._interrupted()
-                if called:
-                    core.stop_speaking()
-                    core.bus.publish("barge_in")
-                    if command:
-                        core.submit(command, "voice")
-                    else:
-                        self._push_to_talk.set()  # écoute dès que la réponse abandonnée est close
-                continue
+        if core.busy or core.speaker.speaking:
+            called, command = self._interrupted()
+            if called:
+                core.stop_speaking()
+                core.bus.publish("barge_in")
+                if command:
+                    core.submit(command, "voice")
+                else:
+                    self._push_to_talk.set()  # écoute dès que la réponse abandonnée est close
+            return
 
-            if core.awaiting_follow_up:
-                # Mode conversation : on peut enchaîner sans rappeler l'assistant.
-                core.awaiting_follow_up = False
-                self._push_to_talk.clear()
-                listener.flush()
-                text = self._listen(core.config.follow_up_seconds)
-                if text:
-                    core.submit(text, "voice")
-                continue
-
-            called, command = self._called()
-            if not called:
-                continue
-            core.bus.publish("wake")
-            if command:
-                core.submit(command, "voice")
-                continue
-            beep()
+        if core.awaiting_follow_up:
+            # Mode conversation : on peut enchaîner sans rappeler l'assistant.
+            core.awaiting_follow_up = False
+            self._push_to_talk.clear()
             listener.flush()
-            text = self._listen(6.0)
+            text = self._listen(core.config.follow_up_seconds)
             if text:
                 core.submit(text, "voice")
+            return
+
+        called, command = self._called()
+        if not called:
+            return
+        core.bus.publish("wake")
+        if command:
+            core.submit(command, "voice")
+            return
+        beep()
+        listener.flush()
+        text = self._listen(6.0)
+        if text:
+            core.submit(text, "voice")
 
 
 def beep() -> None:
