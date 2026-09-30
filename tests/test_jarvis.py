@@ -1289,3 +1289,12 @@ def test_conversation_gpt_seulement_avec_une_cle(config):
     assert config.gpt_conversation
     config.conversation = "claude"
     assert not config.gpt_conversation
+
+
+def test_voix_auto_elevenlabs_si_cle(monkeypatch, tmp_path):
+    monkeypatch.setenv("JARVIS_HOME", str(tmp_path))
+    monkeypatch.delenv("JARVIS_TTS", raising=False)
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "xi-test")
+    assert Config().tts_engine == "elevenlabs"
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "")
+    assert Config().tts_engine == "edge"

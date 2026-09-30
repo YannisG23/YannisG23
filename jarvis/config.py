@@ -52,7 +52,8 @@ class Config:
     tts_voice: str = field(default_factory=lambda: _env("JARVIS_VOICE", "fr-FR-RemyMultilingualNeural"))
     tts_rate: str = field(default_factory=lambda: _env("JARVIS_VOICE_RATE", "+5%"))
     # Moteur de voix : « edge » (gratuit), « elevenlabs » ou « openai » (voix premium, clé requise).
-    tts_engine: str = field(default_factory=lambda: _env("JARVIS_TTS", "edge").lower())
+    # « auto » : ElevenLabs dès qu'une clé ELEVENLABS_API_KEY est présente, sinon la voix gratuite.
+    tts_engine: str = field(default_factory=lambda: _env("JARVIS_TTS", "auto").lower())
     elevenlabs_api_key: str = field(default_factory=lambda: _env("ELEVENLABS_API_KEY", ""))
     # « Daniel » : voix masculine posée à l'accent britannique, multilingue.
     elevenlabs_voice_id: str = field(default_factory=lambda: _env("ELEVENLABS_VOICE_ID", "onwK4e9ZLuTAKqWW03F9"))
@@ -103,6 +104,8 @@ class Config:
     )
 
     def __post_init__(self) -> None:
+        if self.tts_engine in {"auto", ""}:
+            self.tts_engine = "elevenlabs" if self.elevenlabs_api_key else "edge"
         if self.codex_delegation not in {"off", "auto", "max"}:
             self.codex_delegation = "auto"
         self.home.mkdir(parents=True, exist_ok=True)
