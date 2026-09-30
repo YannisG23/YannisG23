@@ -59,13 +59,14 @@ def _set_windows_icon(title: str, icon: Path) -> None:
             user32.SendMessageW(hwnd, 0x80, which, handle)  # WM_SETICON
 
 
-def open_window(url: str, title: str, icon_path: Path | None = None, fullscreen: bool = True) -> None:
+def open_window(url: str, title: str, icon_path: Path | None = None, fullscreen: bool = False) -> None:
     """Ouvre la fenêtre et rend la main quand elle est fermée (à appeler depuis le fil principal)."""
     import webview
 
     api = WindowApi()
     window = webview.create_window(
-        title, url, js_api=api, fullscreen=fullscreen, width=1280, height=800, min_size=(420, 520),
+        title, url, js_api=api, fullscreen=fullscreen, maximized=not fullscreen, width=1280, height=800,
+        min_size=(420, 520),
         background_color="#06080d", text_select=False,
     )
     api.window = window
@@ -80,3 +81,15 @@ def open_window(url: str, title: str, icon_path: Path | None = None, fullscreen:
 
     window.events.shown += on_shown
     webview.start()
+
+
+def main(argv: list[str]) -> int:
+    """python -m jarvis.appwindow URL TITRE [ICONE] : lancé par Jarvis dans un processus séparé."""
+    url, title = argv[0], argv[1]
+    icon = Path(argv[2]) if len(argv) > 2 else None
+    open_window(url, title, icon)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

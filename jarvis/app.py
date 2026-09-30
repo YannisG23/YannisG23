@@ -238,29 +238,34 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
 
     try:
         if window:
-            # Le fil principal appartient à la fenêtre ; le terminal tourne à côté et ferme la fenêtre s'il quitte.
-            from .appwindow import open_window
+            # La fenêtre tourne dans son propre processus : si elle plante (WebView2, pilote graphique…),
+            # Jarvis continue et bascule sur le navigateur ; ses erreurs vont dans fenetre.log.
+            import subprocess
+            import sys
 
+            log_path = config.home / "fenetre.log"
             icon = config.home / "icon.ico"
+            with open(log_path, "w", encoding="utf-8") as log:
+                proc = subprocess.Popen(
+                    [sys.executable, "-m", "jarvis.appwindow", board.url, config.assistant_name, str(icon)],
+                    stdout=log, stderr=subprocess.STDOUT,
+                )
 
-            def terminal() -> None:
-                try:
-                    console_loop()
-                except (KeyboardInterrupt, EOFError):
-                    return  # stdin fermé (lancement sans console) : la fenêtre reste ouverte
-                import webview
+                def terminal() -> None:
+                    try:
+                        console_loop()
+                    except (KeyboardInterrupt, EOFError):
+                        return
+                    proc.terminate()  # « quitter » au clavier ferme aussi la fenêtre
 
-                for w in list(webview.windows):
-                    w.destroy()
-
-            threading.Thread(target=terminal, daemon=True, name="jarvis-terminal").start()
-            try:
-                open_window(board.url, config.assistant_name, icon)
-            except ImportError:
-                console.print("[red]pywebview n'est pas installé : relance install.bat (ou pip install -e \".[all]\"). "
-                              "J'ouvre le navigateur à la place.[/]")
+                threading.Thread(target=terminal, daemon=True, name="jarvis-terminal").start()
+                code = proc.wait()
+            if code != 0:
+                console.print(f"[red]La fenêtre de bureau s'est fermée sur une erreur (détail : {escape(str(log_path))}). "
+                              "J'ouvre le centre de commande dans le navigateur ; Jarvis continue.[/]")
+                core.bus.publish("error", {"message": f"Fenêtre de bureau : erreur, voir {log_path}"})
                 webbrowser.open(board.url)
-                threading.Event().wait()
+                console_loop()
         else:
             console_loop()
     except (KeyboardInterrupt, EOFError):
