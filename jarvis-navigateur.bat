@@ -8,6 +8,6 @@ if not exist .venv\Scripts\activate.bat (
   exit /b 1
 )
 call .venv\Scripts\activate.bat
-python -c "import webview" 2>nul || (echo Installation de la fenetre de bureau... & pip install pywebview)
-python -m jarvis --app %*
+rem Version navigateur (sans fenetre de bureau) : utile si la fenetre pose probleme.
+python -m jarvis %*
 pause
