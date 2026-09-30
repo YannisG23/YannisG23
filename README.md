@@ -65,6 +65,15 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 4. Renomme-le `google_credentials.json` et place-le dans `~/.jarvis/` (sous Windows : `C:\Users\<toi>\.jarvis\`).
 5. Lance `python -m jarvis --setup-google` et accepte les autorisations dans le navigateur.
 
+### Connecter Codex (optionnel, abonnement ChatGPT)
+
+Codex, l'IA de code d'OpenAI, sert de **deuxième cerveau** : « demande l'avis de Codex », « fais analyser ce projet par Codex ». Ce qu'il fait consomme ton abonnement ChatGPT, pas ton quota Claude.
+
+1. Il faut Node.js (https://nodejs.org) et un abonnement ChatGPT Plus ou Pro.
+2. Double-clique sur **connexion-codex.bat** : il installe Codex puis ouvre la connexion ChatGPT (choisis « Sign in with ChatGPT »).
+
+Deux usages : un avis ou une analyse en **lecture seule** (sans confirmation), ou une **tâche qui modifie des fichiers** dans un dossier précis, toujours après ta confirmation.
+
 ### Raccourcis du centre de commande
 
 | Touche | Action |

@@ -159,6 +159,18 @@ def _wake_word() -> str:
     return "« Hey Jarvis » prêt"
 
 
+def _codex() -> str:
+    import subprocess
+
+    from .tools.codex_tools import find_codex
+
+    executable = find_codex()
+    if not executable:
+        raise RuntimeError("non installé")
+    version = subprocess.run([executable, "--version"], capture_output=True, text=True, timeout=30)
+    return (version.stdout or version.stderr).strip() or "installé"
+
+
 def _google(config: Config) -> str:
     from .tools.google_tools import authorize
 
@@ -233,6 +245,8 @@ def run_doctor(config: Config) -> int:
             check.run("Mot d'activation", _wake_word,
                       "Sans lui, clique sur le micro du centre de commande ou appuie sur Entrée. "
                       "Sous Linux, utilise Python 3.10 ou 3.11.", optional=True)
+    check.run("Codex (abonnement ChatGPT)", _codex,
+              "Optionnel : lance connexion-codex.bat pour l'installer et le connecter.", optional=True)
     check.run("Gmail et Agenda", lambda: _google(config),
               "Optionnel : suis la section « Connecter Gmail » du README puis python -m jarvis --setup-google.",
               optional=True)

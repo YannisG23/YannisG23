@@ -972,3 +972,43 @@ def test_voice_loop_survit_a_une_erreur_audio():
         assert "error" in events
     finally:
         loop.stop()
+
+
+# ---------------------------------------------------------------- Codex
+
+def test_codex_absent(monkeypatch):
+    from jarvis.tools import codex_tools
+
+    monkeypatch.setattr(codex_tools, "find_codex", lambda: None)
+    assert "connexion-codex.bat" in codex_tools.ask_codex("Salut")
+
+
+def test_codex_lecture_seule_par_stdin(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    from jarvis.tools import codex_tools
+
+    seen = {}
+
+    def fake_run(command, input, **kwargs):
+        seen.update(command=command, input=input, cwd=kwargs["cwd"])
+        Path(command[command.index("--output-last-message") + 1]).write_text("Deuxième avis : ok.", encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="journal", stderr="")
+
+    monkeypatch.setattr(codex_tools, "find_codex", lambda: "codex")
+    monkeypatch.setattr(codex_tools.subprocess, "run", fake_run)
+    question = 'Ton avis ? " & calc'
+    assert codex_tools.ask_codex(question, str(tmp_path)) == "Deuxième avis : ok."
+    assert seen["input"] == question and question not in seen["command"]  # jamais dans la ligne de commande
+    assert seen["command"][seen["command"].index("--sandbox") + 1] == "read-only"
+    assert seen["cwd"] == str(tmp_path.resolve())
+
+
+def test_codex_task_demande_confirmation_et_refuse_les_chemins_douteux(monkeypatch):
+    from jarvis.tools import codex_tools
+
+    assert registry.get("codex_task").confirm is not None
+    assert registry.get("ask_codex").confirm is None
+    monkeypatch.setattr(codex_tools, "find_codex", lambda: "codex")
+    assert codex_tools.codex_task("corrige", 'C:\\x" & calc') == "Chemin de dossier invalide."
+    assert "introuvable" in codex_tools.codex_task("corrige", "/dossier/qui/n/existe/pas")
