@@ -48,6 +48,7 @@ python -m jarvis --doctor   # vérifie tout : compte Claude, micro, haut-parleur
 python -m jarvis            # voix + centre de commande (s'ouvre dans le navigateur)
 python -m jarvis --text     # sans micro ni voix : clavier + centre de commande
 python -m jarvis --micros   # liste les micros et haut-parleurs (à choisir dans .env)
+python -m jarvis --trouver-micro   # teste chaque micro pendant que tu parles et donne le bon réglage
 python -m jarvis --memory   # voir ce que Jarvis a retenu de toi
 ```
 

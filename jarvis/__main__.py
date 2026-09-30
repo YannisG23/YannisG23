@@ -16,6 +16,8 @@ def main() -> None:
     parser.add_argument("--memory", action="store_true", help="afficher ce que l'assistant sait de toi")
     parser.add_argument("--login", action="store_true", help="connecter ton compte Claude (abonnement)")
     parser.add_argument("--micros", action="store_true", help="lister les micros et haut-parleurs disponibles")
+    parser.add_argument("--trouver-micro", action="store_true",
+                        help="tester chaque micro pendant que tu parles et trouver celui qui marche")
     parser.add_argument("--doctor", action="store_true", help="vérifier l'installation (clé, micro, voix...)")
     args = parser.parse_args()
     config = Config()
@@ -27,6 +29,22 @@ def main() -> None:
         from .brain_subscription import login
 
         raise SystemExit(login())
+    if args.trouver_micro:
+        from .voice.devices import scan
+
+        print("Parle sans t'arrêter (compte à voix haute, lis un texte…) jusqu'à la fin du test.")
+        results = scan(on_progress=lambda d: print(f"  test de {d['index']:>3}  {d['name']}…", flush=True))
+        print("\nRésultats (niveau : > 250 très bien, 30-250 faible, < 30 ne capte rien) :")
+        for index, name, level in results:
+            shown = "inutilisable" if level < 0 else f"{level:.0f}"
+            print(f"  {index:>3}  {shown:>12}  {name}")
+        best = results[0] if results and results[0][2] >= 30 else None
+        if best:
+            print(f"\nLe meilleur : {best[1]}\nMets dans .env : JARVIS_MIC={best[0]}")
+        else:
+            print("\nAucun micro n'a capté ta voix : vérifie que le micro du casque n'est pas coupé "
+                  "(bouton du casque, SteelSeries GG / Sonar, Paramètres Windows > Son > Entrée).")
+        return
     if args.micros:
         from .voice.devices import describe
 

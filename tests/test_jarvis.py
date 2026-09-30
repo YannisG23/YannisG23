@@ -1043,3 +1043,27 @@ def test_voix_openai(monkeypatch):
     monkeypatch.setattr(requests, "post", refused)
     with pytest.raises(speak.ElevenLabsQuotaError):
         speak.synth_openai("Bonjour", "sk", "ash", "gpt-4o-mini-tts")
+
+
+def test_scan_des_micros(monkeypatch):
+    import sys
+    from types import ModuleType
+
+    import numpy as np
+
+    from jarvis.voice import devices
+
+    fake = [
+        {"index": 1, "name": "Sonar - Microphone", "max_input_channels": 1, "max_output_channels": 0, "hostapi": 0},
+        {"index": 2, "name": "Micro (G435)", "max_input_channels": 1, "max_output_channels": 0, "hostapi": 0},
+        {"index": 3, "name": "Casque", "max_input_channels": 0, "max_output_channels": 2, "hostapi": 0},
+    ]
+    levels = {1: 9, 2: 800}
+    sd = ModuleType("sounddevice")
+    sd.rec = lambda frames, samplerate, channels, dtype, device: np.full((frames, 1), levels[device], dtype=np.int16)
+    sd.wait = lambda: None
+    monkeypatch.setitem(sys.modules, "sounddevice", sd)
+    monkeypatch.setattr(devices, "_devices", lambda: fake)
+    monkeypatch.setattr(devices, "_default_hostapi", lambda: 0)
+    results = devices.scan(seconds=0.01)
+    assert [r[0] for r in results] == [2, 1]  # le micro qui capte le plus en premier, les sorties ignorées

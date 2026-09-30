@@ -86,3 +86,27 @@ def describe() -> str:
     lines.append("\nPour en choisir un, ajoute dans .env : JARVIS_MIC=<numéro ou bout du nom> "
                  "et/ou JARVIS_SPEAKERS=<numéro ou bout du nom>.")
     return "\n".join(lines)
+
+
+def scan(seconds: float = 2.0, on_progress=None) -> list[tuple[int, str, float]]:
+    """Enregistre quelques secondes sur chaque micro et renvoie (numéro, nom, niveau), du plus fort au plus faible.
+
+    L'utilisateur parle en continu pendant le test : le bon micro est celui qui capte le plus.
+    """
+    import numpy as np
+    import sounddevice as sd
+
+    hostapi = _default_hostapi()
+    inputs = [d for d in _devices() if d["max_input_channels"] > 0 and d.get("hostapi", hostapi) == hostapi]
+    results = []
+    for d in inputs:
+        if on_progress:
+            on_progress(d)
+        try:
+            audio = sd.rec(int(seconds * 16000), samplerate=16000, channels=1, dtype="int16", device=d["index"])
+            sd.wait()
+            level = float(np.sqrt(np.mean(audio.astype(np.float32) ** 2)))
+        except Exception:
+            level = -1.0  # micro inutilisable (occupé, débranché, format refusé)
+        results.append((d["index"], d["name"], level))
+    return sorted(results, key=lambda r: r[2], reverse=True)
