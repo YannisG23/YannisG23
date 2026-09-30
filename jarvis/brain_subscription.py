@@ -305,8 +305,9 @@ class SubscriptionBrain(Brain):
                 self._model = None
         self._relay_notes = []
         self._turn_count += 1
-        self.memory.log("user", text, self.session_id)
-        self.memory.log("assistant", reply, self.session_id)
+        if self.log_turns:
+            self.memory.log("user", text, self.session_id)
+            self.memory.log("assistant", reply, self.session_id)
         return reply
 
     # ------------------------------------------------------------- relais ChatGPT
@@ -361,8 +362,9 @@ class SubscriptionBrain(Brain):
         self._relay_notes.append((text, answer))
         self._relay_notes = self._relay_notes[-RELAY_HISTORY:]
         self._recent.append((text, answer))
-        self.memory.log("user", text, self.session_id)
-        self.memory.log("assistant", full, self.session_id)
+        if self.log_turns:
+            self.memory.log("user", text, self.session_id)
+            self.memory.log("assistant", full, self.session_id)
         return full
 
     async def _turn(self, prompt: str, on_sentence, on_delta) -> str:

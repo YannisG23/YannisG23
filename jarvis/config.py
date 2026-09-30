@@ -76,6 +76,12 @@ class Config:
     mic_device: str = field(default_factory=lambda: _env("JARVIS_MIC", ""))
     speaker_device: str = field(default_factory=lambda: _env("JARVIS_SPEAKERS", ""))
 
+    # Conversation : « auto » = ChatGPT parle et Claude agit dès qu'une clé OPENAI_API_KEY est présente,
+    # « gpt » pour l'imposer, « claude » pour que Claude fasse tout.
+    conversation: str = field(default_factory=lambda: _env("JARVIS_CONVERSATION", "auto").lower())
+    # Modèle ChatGPT de conversation : petit et rapide (facturé à l'usage sur la clé API).
+    gpt_model: str = field(default_factory=lambda: _env("JARVIS_GPT_MODEL", "gpt-4.1-mini"))
+
     # Délégation à Codex (abonnement ChatGPT) pour économiser le quota Claude :
     # « off » (seulement sur demande), « auto » (grosses tâches de code), « max » (dès que c'est possible).
     codex_delegation: str = field(default_factory=lambda: _env("JARVIS_CODEX_DELEGATION", "auto").lower())
@@ -129,6 +135,12 @@ class Config:
     @property
     def wake_by_name(self) -> bool:
         return self.wake_mode not in {"hey", "hey_jarvis", "openwakeword"}
+
+    @property
+    def gpt_conversation(self) -> bool:
+        if self.conversation == "claude":
+            return False
+        return bool(self.openai_api_key)
 
     @property
     def uses_subscription(self) -> bool:

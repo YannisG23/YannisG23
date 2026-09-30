@@ -180,6 +180,8 @@ class Brain:
         self._cancel = False
         # Quel cerveau répond : « claude » ou « chatgpt » (relais Codex si Claude est en limite d'usage).
         self.active_brain = "claude"
+        # Faux quand un autre cerveau (ChatGPT) mène la conversation et journalise lui-même les échanges.
+        self.log_turns = True
         self._new_session()
 
     # ------------------------------------------------------------------ session
@@ -269,8 +271,9 @@ class Brain:
             # Retire le tour incomplet pour que l'historique reste valide.
             del self.messages[start:]
             raise
-        self.memory.log("user", text, self.session_id)
-        self.memory.log("assistant", reply, self.session_id)
+        if self.log_turns:
+            self.memory.log("user", text, self.session_id)
+            self.memory.log("assistant", reply, self.session_id)
         return reply
 
     def _stream(self, on_delta: Callable[[str], None], **extra: Any) -> Any:

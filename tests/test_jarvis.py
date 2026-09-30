@@ -1188,3 +1188,104 @@ def test_api_fenetre_sans_attribut_public_recursif():
     # pywebview expose récursivement les attributs publics : seules des méthodes doivent l'être.
     public = [n for n in vars(api) if not n.startswith("_")]
     assert public == []
+
+
+# ---------------------------------------------------------------- ChatGPT parle, Claude agit
+
+class _SSE:
+    def __init__(self, chunks, status=200):
+        self.status_code = status
+        self._lines = [f"data: {json.dumps(c)}" for c in chunks] + ["data: [DONE]"]
+
+    def iter_lines(self, decode_unicode=True):
+        yield from self._lines
+
+    def json(self):
+        return {"error": {"message": "quota"}}
+
+    def close(self):
+        pass
+
+
+class _FakeOpenAI:
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.payloads = []
+
+    def post(self, url, json, stream, timeout, headers):
+        self.payloads.append(json)
+        return self.responses.pop(0)
+
+
+def _delta(**d):
+    return {"choices": [{"delta": d}]}
+
+
+class _FakeClaude:
+    def __init__(self, memory, reply="Fichier ouvert."):
+        self.memory, self.reply, self.orders = memory, reply, []
+        self.system = [{"text": "Tu es Jarvis."}, {"text": "# Ce que tu sais de Yannis"}]
+        self.session_id, self.context_tokens, self.needs_consolidation = "s1", 0, False
+        self.ctx, self.log_turns, self.events = None, True, []
+        self.emit = lambda kind, data: self.events.append(kind)
+        self._summarize = lambda t, k: None
+
+    def _recall_block(self, text):
+        return ""
+
+    def ask(self, text, on_sentence=None, on_delta=None):
+        self.orders.append(text)
+        return self.reply
+
+    def interrupt(self):
+        pass
+
+
+def test_chatgpt_repond_seul_a_la_conversation(config, memory):
+    from jarvis.brain_gpt import ConversationBrain
+
+    config.openai_api_key = "sk-test"
+    claude = _FakeClaude(memory)
+    http = _FakeOpenAI(_SSE([_delta(content="Salut Yannis ! "), _delta(content="Ça va bien, et toi ?")]))
+    brain = ConversationBrain(config, claude, session=http)
+    said = []
+    assert brain.ask("Salut", on_sentence=said.append) == "Salut Yannis ! Ça va bien, et toi ?"
+    assert said and claude.orders == []  # Claude n'a pas été dérangé
+    assert claude.log_turns is False
+    assert [r for r, _, _ in memory.session_log("s1")] == ["user", "assistant"]
+    assert http.payloads[0]["model"] == config.gpt_model and http.payloads[0]["tools"][0]["function"]["name"] == "claude"
+
+
+def test_chatgpt_confie_les_actions_a_claude(config, memory):
+    from jarvis.brain_gpt import ConversationBrain
+
+    config.openai_api_key = "sk-test"
+    claude = _FakeClaude(memory)
+    call = {"index": 0, "id": "c1", "function": {"name": "claude", "arguments": '{"consigne": "Ouvre le dossier Photos"}'}}
+    http = _FakeOpenAI(_SSE([_delta(content="Je m'en occupe. "), _delta(tool_calls=[call])]),
+                       _SSE([_delta(content="C'est ouvert.")]))
+    brain = ConversationBrain(config, claude, session=http)
+    reply = brain.ask("Ouvre mes photos")
+    assert claude.orders == ["Ouvre le dossier Photos"]
+    assert reply == "Je m'en occupe. C'est ouvert."
+    tool_msgs = [m for m in http.payloads[1]["messages"] if m["role"] == "tool"]
+    assert tool_msgs[0]["content"] == "Fichier ouvert."
+
+
+def test_sans_chatgpt_claude_prend_le_relais(config, memory):
+    from jarvis.brain_gpt import ConversationBrain
+
+    config.openai_api_key = "sk-test"
+    claude = _FakeClaude(memory, reply="Réponse de Claude.")
+    brain = ConversationBrain(config, claude, session=_FakeOpenAI(_SSE([], status=429)))
+    assert brain.ask("Salut") == "Réponse de Claude."
+    assert claude.orders == ["Salut"] and brain.active_brain == "claude"
+
+
+def test_conversation_gpt_seulement_avec_une_cle(config):
+    config.openai_api_key = ""
+    assert not config.gpt_conversation
+    config.openai_api_key = "sk-x"
+    assert config.gpt_conversation
+    config.conversation = "claude"
+    assert not config.gpt_conversation

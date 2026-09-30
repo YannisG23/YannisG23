@@ -115,6 +115,20 @@ def _openai_voice(config: Config) -> str:
     return f"voix « {config.openai_voice} » ({config.openai_tts_model}), {len(audio) / 24000:.1f} s de test"
 
 
+def _gpt(config: Config) -> str:
+    import requests
+
+    start = time.monotonic()
+    response = requests.post(
+        "https://api.openai.com/v1/chat/completions", timeout=30,
+        headers={"Authorization": f"Bearer {config.openai_api_key}"},
+        json={"model": config.gpt_model, "messages": [{"role": "user", "content": "Réponds juste : ok"}]},
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"erreur {response.status_code} : {response.text[:200]}")
+    return f"{config.gpt_model} répond en {time.monotonic() - start:.1f} s"
+
+
 def _microphone() -> str:
     import numpy as np
     import sounddevice as sd
@@ -225,6 +239,10 @@ def run_doctor(config: Config) -> int:
         brain_ok = check.run("Cerveau : clé API Anthropic", _api(config),
                              "Mets ANTHROPIC_API_KEY=sk-ant-... dans le fichier .env (console.anthropic.com → API keys). "
                              "Si la clé est bonne, vérifie JARVIS_MODEL et le crédit du compte.")
+    if config.gpt_conversation:
+        check.run("Conversation ChatGPT (clé API OpenAI)", lambda: _gpt(config),
+                  "Vérifie OPENAI_API_KEY et le crédit sur platform.openai.com (Billing), ou le nom du modèle "
+                  "JARVIS_GPT_MODEL. En attendant, Claude répond à tout.", optional=True)
     check.run("Mémoire", lambda: _memory(config))
     check.run("Centre de commande", lambda: _port(config),
               "Un autre assistant tourne déjà ? Sinon change JARVIS_DASHBOARD_PORT.")

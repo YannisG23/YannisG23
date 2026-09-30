@@ -102,6 +102,11 @@ class Core:
         else:
             self.brain = Brain(config, self.memory, registry, client=client, confirm=self.confirm,
                                notify=self.notify, on_event=self.bus.publish)
+        if config.gpt_conversation and client is None:
+            # ChatGPT mène la conversation (rapide), Claude agit quand il le lui demande.
+            from .brain_gpt import ConversationBrain
+
+            self.brain = ConversationBrain(config, self.brain)
         self.voice = None  # VoiceLoop, branchée par l'application en mode vocal
         self._name = config.assistant_name
         self.state = "idle"

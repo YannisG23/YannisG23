@@ -77,7 +77,8 @@ class Dashboard:
                       else "Sonnet (abonnement)"),
             "effort": config.effort,
             "voice": config.tts_voice,
-            "brain": "Abonnement Claude" if config.uses_subscription else "API Anthropic",
+            "brain": ("ChatGPT (conversation) + Claude (actions)" if config.gpt_conversation
+                      else "Abonnement Claude" if config.uses_subscription else "API Anthropic"),
             # Quel cerveau répond : « claude » ou « chatgpt » (relais Codex quand Claude est en limite d'usage).
             "active_brain": getattr(core.brain, "active_brain", "claude"),
             "codex_delegation": config.codex_delegation,

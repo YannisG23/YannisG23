@@ -66,6 +66,10 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 4. Renomme-le `google_credentials.json` et place-le dans `~/.jarvis/` (sous Windows : `C:\Users\<toi>\.jarvis\`).
 5. Lance `python -m jarvis --setup-google` et accepte les autorisations dans le navigateur.
 
+### ChatGPT pour parler, Claude pour agir (optionnel, clé API OpenAI)
+
+Mets une clé API OpenAI dans `.env` (`OPENAI_API_KEY=sk-...`, créée sur platform.openai.com, facturée à l'usage : quelques euros par mois ; pense à fixer un plafond). ChatGPT (`JARVIS_GPT_MODEL`, un petit modèle rapide) mène alors la conversation et répond presque instantanément ; dès qu'il faut agir (PC, fichiers, e-mails, agenda, mémoire, web), il confie la tâche à Claude, qui a tous les outils et demande toujours tes confirmations. Ton quota Claude ne sert plus qu'aux vraies actions. Si l'API OpenAI est indisponible, Claude répond à tout. `JARVIS_CONVERSATION=claude` pour revenir au tout-Claude.
+
 ### Connecter Codex (optionnel, abonnement ChatGPT)
 
 Codex, l'IA de code d'OpenAI, sert de **deuxième cerveau** : « demande l'avis de Codex », « fais analyser ce projet par Codex ». Ce qu'il fait consomme ton abonnement ChatGPT, pas ton quota Claude.
