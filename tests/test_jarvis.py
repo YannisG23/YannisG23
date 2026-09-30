@@ -922,3 +922,17 @@ def test_subscription_ferme_l_ancienne_connexion_avant_de_reessayer(sub_brain):
     sdk.ClaudeSDKClient = factory
     assert brain.ask("Salut") == "Ok."
     assert len(closed) == 1  # le processus Claude Code du premier essai n'est pas laissé orphelin
+
+
+def test_core_worker_survit_a_une_erreur_de_consolidation(config, memory):
+    core = Core(config, memory=memory, client=FakeClient())
+
+    def boom():
+        raise RuntimeError("résumé impossible")
+
+    core._consolidate = boom
+    bad = core.new_conversation()
+    assert bad.done.wait(2) and bad.ok is False
+    core._consolidate = lambda: None
+    good = core.new_conversation()
+    assert good.done.wait(2) and good.ok  # le thread de travail tourne toujours

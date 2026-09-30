@@ -188,6 +188,10 @@ class Core:
                     self._reply(job.result)
                 else:
                     job.result = self._answer(job)
+            except Exception as exc:  # un échec (ex. résumé mémoire) ne doit jamais tuer le thread de travail
+                job.ok = False
+                job.result = job.result or "Quelque chose s'est mal passé de mon côté."
+                self.bus.publish("error", {"message": f"{type(exc).__name__}: {exc}"})
             finally:
                 self._apply_rename()
                 self._busy = False
