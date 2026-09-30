@@ -56,7 +56,9 @@ def load_whisper(name: str) -> tuple[object, str]:
             return model, "cuda"
     except Exception:
         pass
-    model = WhisperModel(name, device="cpu", compute_type="int8")
+    # Sur le processeur : un fil par cœur physique environ (par défaut, CTranslate2 n'en prend que 4).
+    threads = max(4, (os.cpu_count() or 8) // 2)
+    model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=threads)
     list(model.transcribe(silence, language="fr", beam_size=1)[0])
     return model, "cpu"
 
