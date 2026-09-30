@@ -76,6 +76,10 @@ class Config:
     mic_device: str = field(default_factory=lambda: _env("JARVIS_MIC", ""))
     speaker_device: str = field(default_factory=lambda: _env("JARVIS_SPEAKERS", ""))
 
+    # Délégation à Codex (abonnement ChatGPT) pour économiser le quota Claude :
+    # « off » (seulement sur demande), « auto » (grosses tâches de code), « max » (dès que c'est possible).
+    codex_delegation: str = field(default_factory=lambda: _env("JARVIS_CODEX_DELEGATION", "auto").lower())
+
     # Centre de commande
     dashboard_port: int = field(default_factory=lambda: int(_env("JARVIS_DASHBOARD_PORT", "8765")))
     # Briefing automatique au premier lancement de la matinée.
@@ -91,6 +95,8 @@ class Config:
     )
 
     def __post_init__(self) -> None:
+        if self.codex_delegation not in {"off", "auto", "max"}:
+            self.codex_delegation = "auto"
         self.home.mkdir(parents=True, exist_ok=True)
         # Un nom donné à la voix (« tu t'appelles Kali ») l'emporte sur le fichier .env.
         state = self.load_state()

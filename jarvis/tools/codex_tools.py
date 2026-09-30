@@ -46,13 +46,25 @@ def _folder(folder: str) -> Path | str:
     return path
 
 
+class CodexError(RuntimeError):
+    """Codex n'a pas pu répondre ; le message peut être dit tel quel."""
+
+
 def run_codex(prompt: str, folder: str = "", write: bool = False, timeout: int = TIMEOUT) -> str:
+    try:
+        return exec_codex(prompt, folder, write, timeout)
+    except CodexError as exc:
+        return str(exc)
+
+
+def exec_codex(prompt: str, folder: str = "", write: bool = False, timeout: int = TIMEOUT) -> str:
+    """Lance Codex ; lève CodexError en cas d'échec (utilisé aussi par le relais du cerveau)."""
     executable = find_codex()
     if not executable:
-        return MISSING
+        raise CodexError(MISSING)
     cwd = _folder(folder)
     if isinstance(cwd, str):
-        return cwd
+        raise CodexError(cwd)
     with tempfile.TemporaryDirectory() as tmp:
         answer_file = Path(tmp) / "reponse.txt"
         # La demande passe par l'entrée standard (« - ») : jamais dans la ligne de commande.
@@ -65,23 +77,29 @@ def run_codex(prompt: str, folder: str = "", write: bool = False, timeout: int =
             result = subprocess.run(command, input=prompt, capture_output=True, text=True, env=env,
                                     encoding="utf-8", errors="replace", timeout=timeout, cwd=str(cwd))
         except subprocess.TimeoutExpired:
-            return f"Codex n'a pas fini en {timeout // 60} minutes : j'ai arrêté."
+            raise CodexError(f"Codex n'a pas fini en {max(timeout // 60, 1)} minutes : j'ai arrêté.")
         except OSError as exc:
-            return f"Impossible de lancer Codex : {exc}"
+            raise CodexError(f"Impossible de lancer Codex : {exc}")
         answer = answer_file.read_text(encoding="utf-8", errors="replace").strip() if answer_file.exists() else ""
     if result.returncode != 0 and not answer:
         detail = (result.stderr or result.stdout or "").strip()[-1500:]
         if "login" in detail.lower() or "auth" in detail.lower():
-            return "Codex n'est pas connecté à ton compte ChatGPT : lance connexion-codex.bat."
-        return f"Codex a échoué (code {result.returncode}) : {detail or 'aucun détail'}"
-    return answer or (result.stdout or "").strip()[-6000:] or "Codex n'a rien répondu."
+            raise CodexError("Codex n'est pas connecté à ton compte ChatGPT : lance connexion-codex.bat.")
+        raise CodexError(f"Codex a échoué (code {result.returncode}) : {detail or 'aucun détail'}")
+    result_text = answer or (result.stdout or "").strip()[-6000:]
+    if not result_text:
+        raise CodexError("Codex n'a rien répondu.")
+    return result_text
 
 
 @registry.tool(
-    "Demande à Codex (l'IA de code d'OpenAI, abonnement ChatGPT de l'utilisateur) : deuxième avis sur une "
-    "question ou une décision, analyse ou explication de code, recherche de bug. Lecture seule : il ne modifie "
-    "rien. À utiliser quand l'utilisateur demande l'avis de Codex (ou de ChatGPT), ou pour une grosse analyse "
-    "de code, ce qui économise le quota Claude. Ça peut prendre une ou deux minutes : préviens-le.",
+    "Demande à Codex (l'IA de code d'OpenAI, sur l'abonnement ChatGPT de l'utilisateur : ça ne consomme pas le "
+    "quota Claude). Lecture seule, il ne modifie rien. À utiliser : (1) quand l'utilisateur dit « demande à "
+    "ChatGPT / à Codex » ou veut un « deuxième avis » ; (2) de toi-même pour les grosses tâches de code : "
+    "analyse ou explication d'un projet, relecture de code, recherche de bug sur plusieurs fichiers, avis "
+    "d'architecture. Pas pour la conversation, la mémoire ni les actions sur le PC. Codex ne connaît pas la "
+    "conversation : mets tout le contexte utile dans la question. Ça prend une à deux minutes : préviens "
+    "l'utilisateur avant.",
     properties={
         "question": {"type": "string", "description": "La demande complète, avec tout le contexte utile."},
         "folder": {"type": "string", "description": "Dossier du projet à examiner (facultatif)."},
@@ -93,9 +111,10 @@ def ask_codex(question: str, folder: str = "") -> str:
 
 
 @registry.tool(
-    "Confie à Codex une tâche de code qui modifie des fichiers dans un dossier (créer un script, corriger un "
-    "bug, ajouter une fonction). Il ne peut écrire que dans ce dossier. Nécessite la confirmation de "
-    "l'utilisateur. Résume ensuite ce qu'il a changé.",
+    "Confie à Codex (abonnement ChatGPT, sans consommer le quota Claude) une grosse tâche de code qui modifie "
+    "des fichiers dans un dossier : créer un script ou un projet, corriger un bug, ajouter une fonction, "
+    "refactorer. Préfère-le à un travail long de ta part sur du code. Il ne peut écrire que dans ce dossier. "
+    "Nécessite la confirmation de l'utilisateur. Résume ensuite ce qu'il a changé.",
     properties={
         "task": {"type": "string", "description": "Ce qu'il faut faire, précisément."},
         "folder": {"type": "string", "description": "Dossier du projet où il a le droit d'écrire."},
