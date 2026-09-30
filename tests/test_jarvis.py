@@ -1178,3 +1178,13 @@ def test_app_assets_and_flag():
         assert name in html and (static / name).exists()
     assert "https://" not in (static / "sphere.js").read_text(encoding="utf-8")
     import jarvis.appwindow  # importable sans pywebview (import paresseux)
+
+
+def test_api_fenetre_sans_attribut_public_recursif():
+    from jarvis.appwindow import WindowApi
+
+    api = WindowApi()
+    api._window = object()
+    # pywebview expose récursivement les attributs publics : seules des méthodes doivent l'être.
+    public = [n for n in vars(api) if not n.startswith("_")]
+    assert public == []

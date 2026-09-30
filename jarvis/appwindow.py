@@ -14,15 +14,18 @@ class WindowApi:
     """Méthodes appelables depuis la page (window.pywebview.api.*)."""
 
     def __init__(self) -> None:
-        self.window = None
+        # Préfixe « _ » indispensable : pywebview expose à la page tous les attributs publics de l'API,
+        # récursivement ; une référence publique à la fenêtre provoque une récursion infinie et des
+        # accès à WebView2 hors de son fil (plantage au démarrage).
+        self._window = None
 
     def toggle_fullscreen(self) -> None:
-        if self.window is not None:
-            self.window.toggle_fullscreen()
+        if self._window is not None:
+            self._window.toggle_fullscreen()
 
     def set_title(self, title: str) -> None:
-        if self.window is not None and title:
-            self.window.title = str(title)[:120]
+        if self._window is not None and title:
+            self._window.title = str(title)[:120]
 
 
 def make_icon(path: Path) -> Path | None:
@@ -69,7 +72,7 @@ def open_window(url: str, title: str, icon_path: Path | None = None, fullscreen:
         min_size=(420, 520),
         background_color="#06080d", text_select=False,
     )
-    api.window = window
+    api._window = window
     icon = make_icon(icon_path) if icon_path else None
 
     def on_shown() -> None:
