@@ -33,6 +33,11 @@ google = [
     "google-api-python-client>=2.100",
     "google-auth-oauthlib>=1.1",
 ]
+# Carte graphique NVIDIA sous Windows : Whisper sur le GPU, bien plus rapide (téléchargement ~1 Go).
+gpu = [
+    "nvidia-cublas-cu12; sys_platform == 'win32'",
+    "nvidia-cudnn-cu12>=9,<10; sys_platform == 'win32'",
+]
 all = ["jarvis[voice,google]"]
 dev = ["pytest>=8"]
 

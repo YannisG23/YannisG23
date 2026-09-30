@@ -152,11 +152,17 @@ def _edge_voice(config: Config) -> str:
 
 
 def _whisper(config: Config) -> str:
-    from faster_whisper import WhisperModel
+    import numpy as np
 
+    from .voice.listen import load_whisper
+
+    model, device = load_whisper(config.whisper_model)
+    speech = np.random.default_rng(0).normal(0, 0.05, 16000 * 3).astype(np.float32)
     start = time.monotonic()
-    WhisperModel(config.whisper_model, device="auto", compute_type="int8")
-    return f"modèle « {config.whisper_model} » chargé en {time.monotonic() - start:.0f} s"
+    list(model.transcribe(speech, language=config.language, beam_size=1)[0])
+    elapsed = time.monotonic() - start
+    where = "carte graphique" if device == "cuda" else "processeur (plus lent : voir README, section vitesse)"
+    return f"modèle « {config.whisper_model} » sur {where}, {elapsed:.1f} s pour 3 s de parole"
 
 
 def _wake_word() -> str:

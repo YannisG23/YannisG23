@@ -25,6 +25,8 @@ if not exist .venv (
 call .venv\Scripts\activate.bat || goto :error
 python -m pip install --upgrade pip
 pip install -e ".[all]" || goto :error
+rem Carte NVIDIA : Whisper tourne sur le GPU, la reconnaissance vocale devient quasi instantanee.
+where nvidia-smi >nul 2>nul && pip install -e ".[gpu]"
 
 if not exist .env (
   copy .env.example .env >nul

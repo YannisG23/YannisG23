@@ -114,8 +114,8 @@ Une routine est un enchaînement que Jarvis sait refaire à la demande : « **mo
 | Variable | Rôle | Défaut |
 |---|---|---|
 | `JARVIS_BRAIN` | `abonnement` (compte Claude, prix fixe) ou `api` (clé API, facturée à l'usage) | `abonnement` |
-| `JARVIS_MODEL` | Modèle Claude | `claude-opus-5` |
-| `JARVIS_EFFORT` | Profondeur de réflexion : `low` (plus rapide), `medium`, `high` | `medium` |
+| `JARVIS_MODEL` | Modèle Claude (`opus` pour le plus puissant, plus lent) | Sonnet (abonnement), `claude-opus-5` (api) |
+| `JARVIS_EFFORT` | Profondeur de réflexion : `low` (plus rapide), `medium`, `high` | `low` |
 | `JARVIS_VOICE` | Voix (`edge-tts --list-voices`) | `fr-FR-RemyMultilingualNeural` |
 | `JARVIS_VOICE_RATE` | Débit de parole | `+5%` |
 | `JARVIS_WHISPER_MODEL` | Précision de l'écoute : `base`, `small`, `medium`, `large-v3` | `small` |
@@ -138,7 +138,7 @@ Pour des réponses plus rapides : `JARVIS_EFFORT=low`. Avec une carte graphique 
 
 ## Combien ça coûte
 
-- **Cerveau** : ton abonnement Claude (Pro ou Max), à prix fixe. Les échanges avec Jarvis comptent dans les limites d'utilisation de ton abonnement, partagées avec ton usage normal de Claude. Si tu atteins la limite, Jarvis te le dit et te donne l'heure de réinitialisation. Pour dépenser moins de quota : `JARVIS_EFFORT=low`, ou `JARVIS_MODEL=claude-sonnet-5`.
+- **Cerveau** : ton abonnement Claude (Pro ou Max), à prix fixe. Les échanges avec Jarvis comptent dans les limites d'utilisation de ton abonnement, partagées avec ton usage normal de Claude. Si tu atteins la limite, Jarvis te le dit et te donne l'heure de réinitialisation. Par défaut, il utilise Sonnet avec `JARVIS_EFFORT=low` : rapide et économe. `JARVIS_MODEL=opus` pour le plus puissant.
 - **Voix** : gratuite par défaut (Edge). ElevenLabs est payant au-delà de son petit quota gratuit, et Jarvis repasse tout seul sur la voix gratuite quand le quota est épuisé.
 - **Mode API** (`JARVIS_BRAIN=api`) : facturé à l'usage par Anthropic, utile si tu n'as pas d'abonnement.
 - Tout le reste (écoute, mot d'activation, mémoire, centre de commande, météo) est gratuit et tourne sur ton PC.

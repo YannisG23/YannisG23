@@ -87,7 +87,10 @@ class VoiceLoop:
         found, command = self.spotter.find(heard)
         if not found:
             return False, ""
-        # Nom entendu : transcription soignée de la demande.
+        # Sur le processeur, une deuxième transcription coûterait plusieurs secondes : on garde la première.
+        if getattr(self.listener, "device", "cuda") != "cuda":
+            return True, command
+        # Sur la carte graphique, c'est quasi instantané : transcription soignée de la demande.
         precise = self.listener.transcribe(audio)
         found_again, precise_command = self.spotter.find(precise)
         return True, precise_command if found_again else command

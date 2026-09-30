@@ -126,6 +126,9 @@ class _NoApiClient:
     """Le cerveau abonnement n'utilise jamais l'API facturée à l'usage."""
 
 
+SUBSCRIPTION_DEFAULT_MODEL = "sonnet"
+
+
 class SubscriptionBrain(Brain):
     def __init__(self, config: Any, memory: Any, registry: Any, sdk: Any = None,
                  confirm: Callable[[str], bool] | None = None,
@@ -141,8 +144,9 @@ class SubscriptionBrain(Brain):
         self._turn_count = 0
         # Dernières lignes d'erreur de Claude Code : indispensables pour comprendre un échec.
         self._stderr: collections.deque[str] = collections.deque(maxlen=40)
-        # Sans modèle imposé dans .env, Claude Code prend celui de ton abonnement (Pro, Max…).
-        self._model: str | None = config.model if config.model_is_explicit else None
+        # Sans modèle imposé dans .env : Sonnet, rapide et malin, idéal pour une conversation à la voix
+        # (et plus économe en quota). JARVIS_MODEL=opus pour le plus puissant.
+        self._model: str | None = config.model if config.model_is_explicit else SUBSCRIPTION_DEFAULT_MODEL
         self._ids = itertools.count(1)
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True, name="jarvis-claude-code")

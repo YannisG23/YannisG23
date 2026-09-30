@@ -26,7 +26,8 @@ class Config:
     # ou « api » (clé API Anthropic, facturée à l'usage).
     brain: str = field(default_factory=lambda: _env("JARVIS_BRAIN", "abonnement").lower())
     model: str = field(default_factory=lambda: _env("JARVIS_MODEL", "claude-opus-5"))
-    effort: str = field(default_factory=lambda: _env("JARVIS_EFFORT", "medium"))
+    # « low » : réponses rapides, idéal à la voix. « medium » ou « high » pour réfléchir plus longtemps.
+    effort: str = field(default_factory=lambda: _env("JARVIS_EFFORT", "low"))
     max_tool_steps: int = field(default_factory=lambda: int(_env("JARVIS_MAX_TOOL_STEPS", "15")))
     # Au-delà, la conversation est résumée dans la mémoire puis repart à neuf.
     max_context_tokens: int = field(default_factory=lambda: int(_env("JARVIS_MAX_CONTEXT_TOKENS", "150000")))

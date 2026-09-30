@@ -534,8 +534,8 @@ def test_subscription_brain_streams_and_uses_subscription(sub_brain, memory):
     assert "Tu es Jarvis" in prompt and "guitare" in prompt
     assert "mcp__jarvis__remember" in opts.allowed_tools and "WebSearch" in opts.allowed_tools
     assert opts.tools == ["WebSearch", "WebFetch"] and opts.setting_sources == []
-    # Sans JARVIS_MODEL dans .env, c'est le modèle de l'abonnement qui est utilisé.
-    assert opts.include_partial_messages and opts.model is None
+    # Sans JARVIS_MODEL dans .env : Sonnet, rapide à la voix.
+    assert opts.include_partial_messages and opts.model == "sonnet"
     assert "] Salut" in sdk.prompts[0]
     assert brain.turns == 1 and brain.context_tokens == 4070
 

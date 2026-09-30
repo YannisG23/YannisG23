@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import queue
 import re
+import sys
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -18,15 +21,54 @@ _HALLUCINATIONS = re.compile(
 )
 
 
+def _add_nvidia_dlls() -> None:
+    """Windows : rend visibles les DLL CUDA installées par pip (paquets nvidia-cublas-cu12, nvidia-cudnn-cu12)."""
+    if sys.platform != "win32":
+        return
+    import site
+
+    bases = [*site.getsitepackages(), site.getusersitepackages()]
+    for base in bases:
+        for folder in Path(base).glob("nvidia/*/bin"):
+            try:
+                os.add_dll_directory(str(folder))
+            except OSError:
+                continue
+            os.environ["PATH"] = str(folder) + os.pathsep + os.environ.get("PATH", "")
+
+
+def load_whisper(name: str) -> tuple[object, str]:
+    """Charge Whisper sur la carte graphique NVIDIA si elle est utilisable, sinon sur le processeur.
+
+    Un essai de transcription vérifie tout de suite que CUDA marche vraiment (les DLL manquantes
+    ne se voient qu'à ce moment-là) et « chauffe » le modèle pour que la première phrase soit rapide.
+    """
+    from faster_whisper import WhisperModel
+
+    silence = np.zeros(SAMPLE_RATE, dtype=np.float32)
+    _add_nvidia_dlls()
+    try:
+        import ctranslate2
+
+        if ctranslate2.get_cuda_device_count() > 0:
+            model = WhisperModel(name, device="cuda", compute_type="float16")
+            list(model.transcribe(silence, language="fr", beam_size=1)[0])
+            return model, "cuda"
+    except Exception:
+        pass
+    model = WhisperModel(name, device="cpu", compute_type="int8")
+    list(model.transcribe(silence, language="fr", beam_size=1)[0])
+    return model, "cpu"
+
+
 class Listener:
     def __init__(self, whisper_model: str, language: str, wake_threshold: float = 0.5,
                  use_wake_model: bool = True, name: str = "") -> None:
         import sounddevice as sd
-        from faster_whisper import WhisperModel
 
         self.language = language
         self.wake_threshold = wake_threshold
-        self.stt = WhisperModel(whisper_model, device="auto", compute_type="int8")
+        self.stt, self.device = load_whisper(whisper_model)
         self.name = name
         # En mode « nom », pas besoin du modèle « Hey Jarvis » : la transcription suffit.
         self.wake = self._load_wake_model() if use_wake_model else None
