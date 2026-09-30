@@ -12,6 +12,8 @@ def main() -> None:
     parser.add_argument("--text", action="store_true", help="sans micro ni voix (clavier et centre de commande)")
     parser.add_argument("--no-dashboard", action="store_true", help="ne pas lancer le centre de commande")
     parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur au démarrage")
+    parser.add_argument("--app", action="store_true",
+                        help="ouvrir le centre de commande dans une fenêtre de bureau plein écran (F11 pour basculer)")
     parser.add_argument("--setup-google", action="store_true", help="connecter Gmail et Google Agenda")
     parser.add_argument("--memory", action="store_true", help="afficher ce que l'assistant sait de toi")
     parser.add_argument("--login", action="store_true", help="connecter ton compte Claude (abonnement)")
@@ -73,7 +75,8 @@ def main() -> None:
 
     from .app import run
 
-    run(config, voice=not args.text, dashboard=not args.no_dashboard, open_browser=not args.no_browser)
+    run(config, voice=not args.text, dashboard=not args.no_dashboard, open_browser=not args.no_browser,
+        window=args.app)
 
 
 if __name__ == "__main__":

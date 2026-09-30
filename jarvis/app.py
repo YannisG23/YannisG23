@@ -125,7 +125,8 @@ def _ensure_claude_login(config: Config) -> None:
     login()
 
 
-def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser: bool = True) -> None:
+def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser: bool = True,
+        window: bool = False) -> None:
     _ensure_claude_login(config)
     speaker = None
     if voice:
@@ -177,7 +178,10 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
         lines.append(core.voice.activation_hint + ". Entrée (champ vide) marche aussi.")
     lines.append("Tu peux aussi écrire ici. « quit » pour quitter.")
     console.print(Panel("\n".join(lines), title=f"{escape(config.assistant_name)} est en ligne", border_style="bright_blue"))
-    if board and open_browser:
+    if window and not board:
+        console.print("[red]Mode appli impossible sans centre de commande : j'ouvre le terminal seul.[/]")
+        window = False
+    if board and open_browser and not window:
         webbrowser.open(board.url)
 
     if core.voice:
@@ -201,7 +205,7 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
         core.bus.publish("assistant_message", {"text": greeting})
         core.say(greeting)
 
-    try:
+    def console_loop() -> None:
         while True:
             text = console.input("").strip()
             if pending.get("id") and text:
@@ -212,11 +216,39 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
                     core.voice.push_to_talk()
                 continue
             if _EXIT.match(text):
-                break
+                return
             if text.lower() == "stop":
                 core.stop_speaking()
                 continue
             core.submit(text, "text")
+
+    try:
+        if window:
+            # Le fil principal appartient à la fenêtre ; le terminal tourne à côté et ferme la fenêtre s'il quitte.
+            from .appwindow import open_window
+
+            icon = config.home / "icon.ico"
+
+            def terminal() -> None:
+                try:
+                    console_loop()
+                except (KeyboardInterrupt, EOFError):
+                    return  # stdin fermé (lancement sans console) : la fenêtre reste ouverte
+                import webview
+
+                for w in list(webview.windows):
+                    w.destroy()
+
+            threading.Thread(target=terminal, daemon=True, name="jarvis-terminal").start()
+            try:
+                open_window(board.url, config.assistant_name, icon)
+            except ImportError:
+                console.print("[red]pywebview n'est pas installé : relance install.bat (ou pip install -e \".[all]\"). "
+                              "J'ouvre le navigateur à la place.[/]")
+                webbrowser.open(board.url)
+                threading.Event().wait()
+        else:
+            console_loop()
     except (KeyboardInterrupt, EOFError):
         pass
     finally:
