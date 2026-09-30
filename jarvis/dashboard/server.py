@@ -78,7 +78,7 @@ class Dashboard:
             "effort": config.effort,
             "voice": config.tts_voice,
             "brain": "Abonnement Claude" if config.uses_subscription else "API Anthropic",
-            "tts": "ElevenLabs" if getattr(core.speaker, "elevenlabs", None) else "Edge (gratuite)",
+            "tts": getattr(core.speaker, "engine_label", "Edge (gratuite)"),
             "voice_enabled": core.voice is not None,
             "wake_word": bool(core.voice and core.voice.listener.has_wake_word),
             "google": google_tools.is_connected(config),

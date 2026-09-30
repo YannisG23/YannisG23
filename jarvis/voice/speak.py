@@ -87,17 +87,43 @@ def synth_elevenlabs(text: str, api_key: str, voice_id: str, model: str) -> np.n
     return _decode_mp3(response.content)
 
 
+def synth_openai(text: str, api_key: str, voice: str, model: str, instructions: str = "") -> np.ndarray:
+    """Synthétise une phrase avec la voix d'OpenAI (API payante à l'usage, clé séparée de ChatGPT Plus)."""
+    import requests
+
+    payload = {"model": model, "voice": voice, "input": text, "response_format": "mp3"}
+    if instructions:
+        payload["instructions"] = instructions  # ton, débit, accent : « parle de façon chaleureuse… »
+    response = requests.post(
+        "https://api.openai.com/v1/audio/speech",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json=payload,
+        timeout=20,
+    )
+    if response.status_code in (401, 402, 403, 429):
+        try:
+            message = response.json().get("error", {}).get("message", "")
+        except ValueError:
+            message = response.text[:200]
+        raise ElevenLabsQuotaError(message or f"erreur {response.status_code}")
+    response.raise_for_status()
+    return _decode_mp3(response.content)
+
+
 class Speaker:
     def __init__(self, voice: str, rate: str = "+0%",
                  on_state: Callable[[bool], None] | None = None,
                  elevenlabs: dict | None = None,
-                 on_warning: Callable[[str], None] | None = None) -> None:
+                 on_warning: Callable[[str], None] | None = None,
+                 openai: dict | None = None) -> None:
         import sounddevice  # noqa: F401  (échoue tout de suite s'il n'y a pas d'audio)
 
         self.voice = voice
         self.rate = rate
         # {"api_key", "voice_id", "model"} pour utiliser ElevenLabs, sinon voix Edge gratuite.
         self.elevenlabs = elevenlabs if elevenlabs and elevenlabs.get("api_key") else None
+        # {"api_key", "voice", "model", "instructions"} pour la voix d'OpenAI.
+        self.openai = openai if openai and openai.get("api_key") else None
         self.on_warning = on_warning or (lambda message: None)
         self.on_play: Callable[[str], None] = lambda text: None  # phrase qui commence à être dite
         self._envelope: np.ndarray | None = None  # volume de la phrase en cours, par tranches de 40 ms
@@ -116,11 +142,22 @@ class Speaker:
 
     @classmethod
     def from_config(cls, config) -> "Speaker":
-        premium = None
+        premium = openai = None
         if config.tts_engine == "elevenlabs" and config.elevenlabs_api_key:
             premium = {"api_key": config.elevenlabs_api_key, "voice_id": config.elevenlabs_voice_id,
                        "model": config.elevenlabs_model}
-        return cls(config.tts_voice, config.tts_rate, elevenlabs=premium)
+        if config.tts_engine == "openai" and config.openai_api_key:
+            openai = {"api_key": config.openai_api_key, "voice": config.openai_voice,
+                      "model": config.openai_tts_model, "instructions": config.openai_voice_instructions}
+        return cls(config.tts_voice, config.tts_rate, elevenlabs=premium, openai=openai)
+
+    @property
+    def engine_label(self) -> str:
+        if self.elevenlabs:
+            return "ElevenLabs"
+        if self.openai:
+            return f"OpenAI ({self.openai['voice']})"
+        return "Edge (gratuite)"
 
     @property
     def speaking(self) -> bool:
@@ -207,6 +244,14 @@ class Speaker:
                 self._done_one()
 
     def _synth_premium(self, text: str) -> np.ndarray | None:
+        if self.openai:
+            try:
+                return synth_openai(text, self.openai["api_key"], self.openai["voice"], self.openai["model"],
+                                    self.openai.get("instructions", ""))
+            except ElevenLabsQuotaError as exc:
+                self.openai = None  # clé refusée ou crédit épuisé : voix gratuite pour le reste de la session
+                self.on_warning(f"Voix OpenAI indisponible ({exc}) : je passe sur la voix gratuite.")
+                return None
         if not self.elevenlabs:
             return None
         try:

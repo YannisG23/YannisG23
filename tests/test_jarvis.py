@@ -614,6 +614,7 @@ def test_elevenlabs_quota_falls_back_to_free_voice(monkeypatch):
     monkeypatch.setattr(speak, "synth_elevenlabs", refuse)
     speaker = object.__new__(speak.Speaker)  # sans ouvrir la sortie audio
     speaker.elevenlabs = {"api_key": "k", "voice_id": "v", "model": "m"}
+    speaker.openai = None
     warnings = []
     speaker.on_warning = warnings.append
     assert speaker._synth_premium("Bonjour") is None
@@ -991,17 +992,19 @@ def test_codex_lecture_seule_par_stdin(monkeypatch, tmp_path):
     seen = {}
 
     def fake_run(command, input, **kwargs):
-        seen.update(command=command, input=input, cwd=kwargs["cwd"])
+        seen.update(command=command, input=input, cwd=kwargs["cwd"], env=kwargs["env"])
         Path(command[command.index("--output-last-message") + 1]).write_text("Deuxième avis : ok.", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="journal", stderr="")
 
     monkeypatch.setattr(codex_tools, "find_codex", lambda: "codex")
     monkeypatch.setattr(codex_tools.subprocess, "run", fake_run)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-voix")
     question = 'Ton avis ? " & calc'
     assert codex_tools.ask_codex(question, str(tmp_path)) == "Deuxième avis : ok."
     assert seen["input"] == question and question not in seen["command"]  # jamais dans la ligne de commande
     assert seen["command"][seen["command"].index("--sandbox") + 1] == "read-only"
     assert seen["cwd"] == str(tmp_path.resolve())
+    assert "OPENAI_API_KEY" not in seen["env"]  # Codex reste sur l'abonnement ChatGPT
 
 
 def test_codex_task_demande_confirmation_et_refuse_les_chemins_douteux(monkeypatch):
@@ -1012,3 +1015,31 @@ def test_codex_task_demande_confirmation_et_refuse_les_chemins_douteux(monkeypat
     monkeypatch.setattr(codex_tools, "find_codex", lambda: "codex")
     assert codex_tools.codex_task("corrige", 'C:\\x" & calc') == "Chemin de dossier invalide."
     assert "introuvable" in codex_tools.codex_task("corrige", "/dossier/qui/n/existe/pas")
+
+
+def test_voix_openai(monkeypatch):
+    import numpy as np
+
+    from jarvis.voice import speak
+
+    sent = {}
+
+    def fake_post(url, headers, json, timeout):
+        sent.update(url=url, json=json)
+        return SimpleNamespace(status_code=200, content=b"mp3", raise_for_status=lambda: None)
+
+    import requests
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr(speak, "_decode_mp3", lambda data: np.zeros(10, dtype=np.float32))
+    audio = speak.synth_openai("Bonjour", "sk", "ash", "gpt-4o-mini-tts", "chaleureux")
+    assert len(audio) == 10
+    assert sent["url"].endswith("/audio/speech")
+    assert sent["json"]["voice"] == "ash" and sent["json"]["instructions"] == "chaleureux"
+
+    def refused(url, headers, json, timeout):
+        return SimpleNamespace(status_code=429, json=lambda: {"error": {"message": "quota"}}, text="")
+
+    monkeypatch.setattr(requests, "post", refused)
+    with pytest.raises(speak.ElevenLabsQuotaError):
+        speak.synth_openai("Bonjour", "sk", "ash", "gpt-4o-mini-tts")

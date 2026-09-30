@@ -141,6 +141,8 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
 
             if config.tts_engine == "elevenlabs" and not config.elevenlabs_api_key:
                 console.print("[yellow]JARVIS_TTS=elevenlabs mais ELEVENLABS_API_KEY est vide : voix gratuite.[/]")
+            if config.tts_engine == "openai" and not config.openai_api_key:
+                console.print("[yellow]JARVIS_TTS=openai mais OPENAI_API_KEY est vide : voix gratuite.[/]")
             speaker = Speaker.from_config(config)
         except Exception as exc:
             console.print(f"[red]Synthèse vocale indisponible : {escape(str(exc))}[/]")

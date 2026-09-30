@@ -106,6 +106,15 @@ def _elevenlabs(config: Config) -> str:
     return f"offre {data.get('tier', '?')}, {max(0, limit - used)} caractères restants ce mois-ci"
 
 
+def _openai_voice(config: Config) -> str:
+    from .voice.speak import synth_openai
+
+    if not config.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY est vide")
+    audio = synth_openai("Test.", config.openai_api_key, config.openai_voice, config.openai_tts_model)
+    return f"voix « {config.openai_voice} » ({config.openai_tts_model}), {len(audio) / 24000:.1f} s de test"
+
+
 def _microphone() -> str:
     import numpy as np
     import sounddevice as sd
@@ -130,7 +139,7 @@ def _voice(config: Config) -> str:
         raise RuntimeError("la lecture ne se termine pas")
     import sounddevice as sd
 
-    voice = "ElevenLabs" if speaker.elevenlabs else config.tts_voice
+    voice = speaker.engine_label if (speaker.elevenlabs or speaker.openai) else config.tts_voice
     return f"voix {voice} sur « {sd.query_devices(kind='output')['name']} » (tu as dû l'entendre)"
 
 
@@ -226,6 +235,10 @@ def run_doctor(config: Config) -> int:
         check.run("Voix neuronale (internet)", lambda: _edge_voice(config),
                   "Pas d'accès à la voix en ligne : il utilisera la voix du système (pyttsx3).",
                   optional=True)
+        if config.tts_engine == "openai":
+            check.run("Voix OpenAI", lambda: _openai_voice(config),
+                      "Vérifie OPENAI_API_KEY (platform.openai.com → API keys) et le crédit du compte API. "
+                      "Sans elle, il utilise la voix gratuite.", optional=True)
         if config.tts_engine == "elevenlabs":
             check.run("Voix ElevenLabs", lambda: _elevenlabs(config),
                       "Vérifie ELEVENLABS_API_KEY (elevenlabs.io → Profile → API keys). "

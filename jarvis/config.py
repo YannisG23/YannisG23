@@ -48,12 +48,20 @@ class Config:
     # Voix
     tts_voice: str = field(default_factory=lambda: _env("JARVIS_VOICE", "fr-FR-RemyMultilingualNeural"))
     tts_rate: str = field(default_factory=lambda: _env("JARVIS_VOICE_RATE", "+5%"))
-    # Moteur de voix : « edge » (gratuit) ou « elevenlabs » (voix premium, clé requise).
+    # Moteur de voix : « edge » (gratuit), « elevenlabs » ou « openai » (voix premium, clé requise).
     tts_engine: str = field(default_factory=lambda: _env("JARVIS_TTS", "edge").lower())
     elevenlabs_api_key: str = field(default_factory=lambda: _env("ELEVENLABS_API_KEY", ""))
     # « Daniel » : voix masculine posée à l'accent britannique, multilingue.
     elevenlabs_voice_id: str = field(default_factory=lambda: _env("ELEVENLABS_VOICE_ID", "onwK4e9ZLuTAKqWW03F9"))
     elevenlabs_model: str = field(default_factory=lambda: _env("ELEVENLABS_MODEL", "eleven_flash_v2_5"))
+    # Voix OpenAI : JARVIS_TTS=openai + une clé API (platform.openai.com, facturée à l'usage,
+    # indépendante de l'abonnement ChatGPT Plus).
+    openai_api_key: str = field(default_factory=lambda: _env("OPENAI_API_KEY", ""))
+    openai_voice: str = field(default_factory=lambda: _env("OPENAI_VOICE", "ash"))
+    openai_tts_model: str = field(default_factory=lambda: _env("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"))
+    openai_voice_instructions: str = field(default_factory=lambda: _env(
+        "OPENAI_VOICE_INSTRUCTIONS",
+        "Parle en français naturel, sur un ton chaleureux et détendu, comme un ami attentionné."))
     # Couper la parole à l'assistant en l'appelant pendant qu'il parle.
     barge_in: bool = field(
         default_factory=lambda: _env("JARVIS_BARGE_IN", "1").lower() not in {"0", "false", "non", "no"}

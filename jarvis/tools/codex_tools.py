@@ -59,8 +59,10 @@ def run_codex(prompt: str, folder: str = "", write: bool = False, timeout: int =
         command = [executable, "exec", "--skip-git-repo-check",
                    "--sandbox", "workspace-write" if write else "read-only",
                    "--cd", str(cwd), "--output-last-message", str(answer_file), "-"]
+        # Sans la clé API de la voix OpenAI : Codex doit rester sur l'abonnement ChatGPT, pas facturer l'API.
+        env = {k: v for k, v in os.environ.items() if k != "OPENAI_API_KEY"}
         try:
-            result = subprocess.run(command, input=prompt, capture_output=True, text=True,
+            result = subprocess.run(command, input=prompt, capture_output=True, text=True, env=env,
                                     encoding="utf-8", errors="replace", timeout=timeout, cwd=str(cwd))
         except subprocess.TimeoutExpired:
             return f"Codex n'a pas fini en {timeout // 60} minutes : j'ai arrêté."
