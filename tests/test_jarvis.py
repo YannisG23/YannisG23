@@ -1067,3 +1067,105 @@ def test_scan_des_micros(monkeypatch):
     monkeypatch.setattr(devices, "_default_hostapi", lambda: 0)
     results = devices.scan(seconds=0.01)
     assert [r[0] for r in results] == [2, 1]  # le micro qui capte le plus en premier, les sorties ignorées
+
+
+# ---------------------------------------------------------------- cerveau hybride Claude + ChatGPT
+
+def _limit_turn(resets_at=None):
+    info = real_sdk.RateLimitInfo(status="rejected", resets_at=resets_at)
+    return [real_sdk.RateLimitEvent(rate_limit_info=info, uuid="r", session_id="s"),
+            _result(is_error=True, result="limit reached")]
+
+
+def test_relais_codex_quand_claude_est_en_limite(sub_brain, monkeypatch):
+    import time as _time
+    from jarvis.tools import codex_tools
+
+    prompts = []
+    monkeypatch.setattr(codex_tools, "find_codex", lambda: "codex")
+    monkeypatch.setattr(codex_tools, "exec_codex",
+                        lambda prompt, folder="", write=False, timeout=0: prompts.append((prompt, write)) or "Il fait beau.")
+    events, spoken = [], []
+    reset = _time.time() + 3600
+    brain, sdk = sub_brain([*_stream_text("Bonjour Yannis."), _result()], _limit_turn(reset),
+                           [*_stream_text("Me revoilà."), _result()],
+                           on_event=lambda kind, data: events.append((kind, data)))
+    brain.ask("Salut")
+    reply = brain.ask("Quel temps demain ?", on_sentence=spoken.append)
+    assert "passe sur ChatGPT" in reply and reply.endswith("Il fait beau.") and spoken[-1] == "Il fait beau."
+    assert brain.active_brain == "chatgpt" and ("brain", {"active": "chatgpt", "until": reset}) in events
+    prompt, write = prompts[0]
+    assert write is False and "Salut" in prompt and "Bonjour Yannis." in prompt and "Quel temps demain ?" in prompt
+    # Tant que la limite dure, Claude n'est pas relancé (le 3e tour de la file n'est pas consommé).
+    assert brain.ask("Et après-demain ?") == "Il fait beau." and len(sdk.turns) == 1
+    # Heure de réinitialisation passée : Claude reprend, avec les échanges de ChatGPT en mémoire.
+    brain._relay_until = _time.time() - 1
+    assert brain.ask("Merci") == "Me revoilà."
+    assert brain.active_brain == "claude" and "relais_chatgpt" in sdk.prompts[-1] and "Il fait beau." in sdk.prompts[-1]
+    assert events[-1] == ("brain", {"active": "claude", "until": None})
+
+
+def test_relais_sans_codex_garde_le_comportement_actuel(sub_brain, monkeypatch):
+    from jarvis.brain import BrainError
+    from jarvis.tools import codex_tools
+
+    monkeypatch.setattr(codex_tools, "find_codex", lambda: None)
+    brain, _ = sub_brain(_limit_turn())
+    with pytest.raises(BrainError, match="limite"):
+        brain.ask("Salut")
+    assert brain.active_brain == "claude"
+
+
+def test_relais_codex_en_echec_garde_le_message_de_limite(sub_brain, monkeypatch):
+    from jarvis.brain import BrainError
+    from jarvis.tools import codex_tools
+
+    def boom(*args, **kwargs):
+        raise codex_tools.CodexError("Codex a échoué")
+
+    monkeypatch.setattr(codex_tools, "find_codex", lambda: "codex")
+    monkeypatch.setattr(codex_tools, "exec_codex", boom)
+    brain, _ = sub_brain(_limit_turn())
+    with pytest.raises(BrainError, match="limite"):
+        brain.ask("Salut")
+    assert brain.active_brain == "claude" and brain._relay_until is None
+
+
+def test_codex_sous_processus_simule_erreur_de_connexion(monkeypatch, tmp_path):
+    from jarvis.tools import codex_tools
+
+    monkeypatch.setattr(codex_tools, "find_codex", lambda: "codex")
+    monkeypatch.setattr(codex_tools.subprocess, "run",
+                        lambda *a, **k: SimpleNamespace(returncode=1, stdout="", stderr="please login"))
+    with pytest.raises(codex_tools.CodexError, match="connexion-codex"):
+        codex_tools.exec_codex("Salut", str(tmp_path))
+    assert "connexion-codex" in codex_tools.ask_codex("Salut", str(tmp_path))  # l'outil, lui, renvoie le texte
+
+
+def test_delegation_codex_ajuste_la_persona(config, memory, monkeypatch):
+    def persona(mode):
+        monkeypatch.setenv("JARVIS_CODEX_DELEGATION", mode)
+        return Brain(Config(), memory, registry, client=FakeClient()).system[0]["text"]
+
+    assert Config().codex_delegation == "auto"
+    monkeypatch.setenv("JARVIS_CODEX_DELEGATION", "n'importe quoi")
+    assert Config().codex_delegation == "auto"
+    off, auto, maxi = persona("off"), persona("auto"), persona("max")
+    assert "ne lui délègue jamais" in off and "ne lui délègue jamais" not in auto
+    assert "grosses tâches de code" in auto and "même modestes" in maxi and "même modestes" not in auto
+    # Commandes vocales : « demande à ChatGPT / à Codex » et « deuxième avis » sont dans la persona.
+    for phrase in ("Demande à ChatGPT / à Codex", "Deuxième avis", "compare", "ask_codex"):
+        assert phrase in auto
+    desc = registry.get("ask_codex").description
+    assert "quota Claude" in desc and "deuxième avis" in desc and "relecture" in desc
+    assert "quota Claude" in registry.get("codex_task").description
+
+
+def test_tableau_de_bord_indique_le_cerveau_actif(config, memory):
+    from jarvis.dashboard.server import Dashboard
+
+    core = Core(config, memory=memory, client=FakeClient())
+    board = Dashboard(core, port=0)
+    assert board.state()["active_brain"] == "claude" and board.state()["codex_delegation"] == "auto"
+    core.brain.active_brain = "chatgpt"
+    assert board.state()["active_brain"] == "chatgpt"

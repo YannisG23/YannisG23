@@ -78,6 +78,9 @@ class Dashboard:
             "effort": config.effort,
             "voice": config.tts_voice,
             "brain": "Abonnement Claude" if config.uses_subscription else "API Anthropic",
+            # Quel cerveau répond : « claude » ou « chatgpt » (relais Codex quand Claude est en limite d'usage).
+            "active_brain": getattr(core.brain, "active_brain", "claude"),
+            "codex_delegation": config.codex_delegation,
             "tts": getattr(core.speaker, "engine_label", "Edge (gratuite)"),
             "voice_enabled": core.voice is not None,
             "wake_word": bool(core.voice and core.voice.listener.has_wake_word),
