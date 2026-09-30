@@ -164,6 +164,15 @@ class SubscriptionBrain(Brain):
     def _run(self, coro: Any, timeout: float | None = None) -> Any:
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result(timeout)
 
+    def _drop_client(self) -> None:
+        """Ferme la connexion à Claude Code (sinon son processus reste orphelin, surtout sous Windows)."""
+        client, self._client = self._client, None
+        if client is not None:
+            try:
+                self._run(client.disconnect(), timeout=5)
+            except Exception:
+                pass
+
     def _build_tools(self) -> list[dict[str, Any]]:
         return []  # les outils passent par le serveur MCP
 
@@ -239,7 +248,7 @@ class SubscriptionBrain(Brain):
                     raise BrainError(MISSING_CLI) from exc
                 if name not in {"ProcessError", "CLIConnectionError"}:
                     raise
-                self._client = None  # on repartira sur une connexion neuve
+                self._drop_client()  # on repartira sur une connexion neuve
                 self._report(exc)
                 if attempt == 2:
                     raise BrainError(self._diagnose()) from exc

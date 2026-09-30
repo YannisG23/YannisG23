@@ -897,3 +897,28 @@ def test_open_path_refuse_les_executables(tmp_path):
     script = tmp_path / "evil.bat"
     script.write_text("echo hi")
     assert "n'ouvre pas" in file_tools.open_path(str(script))
+
+
+def test_subscription_ferme_l_ancienne_connexion_avant_de_reessayer(sub_brain):
+    brain, sdk = sub_brain([*_stream_text("Ok."), _result()])
+    Client = sdk.ClaudeSDKClient
+    closed = []
+
+    class Broken(Client):
+        async def query(self, prompt):
+            raise real_sdk.ProcessError("Command failed", exit_code=1, stderr="boom")
+
+        async def disconnect(self):
+            closed.append(self)
+
+    sdk.ClaudeSDKClient = Broken
+    orig = sdk.ClaudeSDKClient
+    calls = {"n": 0}
+
+    def factory(options):
+        calls["n"] += 1
+        return orig(options) if calls["n"] == 1 else Client(options)
+
+    sdk.ClaudeSDKClient = factory
+    assert brain.ask("Salut") == "Ok."
+    assert len(closed) == 1  # le processus Claude Code du premier essai n'est pas laissé orphelin
