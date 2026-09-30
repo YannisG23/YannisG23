@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+import time
 import webbrowser
 from datetime import datetime
 
@@ -73,6 +74,11 @@ NAMING_PROMPT = (
     "courant en français ni un prénom très répandu). Dis en une phrase pourquoi tu l'as choisi, puis "
     "utilise rename_assistant : {user} confirmera."
 )
+
+
+def _wait_forever() -> None:
+    while True:
+        time.sleep(3600)
 
 
 def _needs_name(config: Config) -> bool:
@@ -203,7 +209,15 @@ def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser
 
     try:
         while True:
-            text = console.input("").strip()
+            try:
+                text = console.input("").strip()
+            except EOFError:
+                # Pas de clavier (lancé en arrière-plan ou par l'appli de bureau) : on continue
+                # à la voix et dans le centre de commande, jusqu'à Ctrl+C ou la fermeture.
+                if not (listener or board):
+                    raise
+                _wait_forever()
+                break
             if pending.get("id") and text:
                 core.resolve_confirm(pending["id"], text.lower() in {"o", "y"} or is_yes(text))
                 continue
