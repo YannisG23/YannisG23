@@ -10,6 +10,7 @@ Jarvis est l'assistant vocal personnel de Yannis (Python, dossier `jarvis/`). Pl
 ## Les rôles
 
 - **Chef de projet** : session cloud « Jarvis : chef de projet ». Répartit les tâches, relit, fusionne et pousse sur `claude/jarvis-personnel-bfhr70`. C'est la seule branche que Yannis installe.
+- **Sessions qui ont besoin des compétences de Yannis** (design, etc.) : elles tournent sur son PC (environnement « DESKTOP-HD3M8M7 »), car c'est là que ses compétences et plugins sont installés. Elles travaillent dans un worktree git séparé (ex. `J:\IAMAISON\jarvis-<sujet>`) pour ne pas gêner le Jarvis qui tourne.
 - **Sessions de développement** (cloud) : une tâche précise chacune, sur leur propre branche `claude/jarvis-<sujet>`. Le chef de projet relit et fusionne.
 - **Sessions PC** (environnement « DESKTOP-HD3M8M7 », dossier `J:\IAMAISON\Jarvis`) : installent, mettent à jour et testent sur le vrai PC Windows de Yannis. Elles ne modifient pas le code : elles rapportent.
 
@@ -19,7 +20,7 @@ Jarvis est l'assistant vocal personnel de Yannis (Python, dossier `jarvis/`). Pl
 2. Yannis est débutant et parle français : on lui écrit en français simple. Une commande à taper est donnée en entier, en précisant le terminal (PowerShell ou cmd ; `irm` n'existe que dans PowerShell ; dans cmd, `cd /d J:\...` pour changer de disque).
 3. On ne touche jamais au fichier `.env` ni à `%USERPROFILE%\.jarvis` (mémoire, état, nom choisi) sans l'accord explicite de Yannis.
 4. Pas de pull request sans demande de Yannis. Les commits se terminent par les lignes d'attribution demandées par la session.
-5. Le quota de l'abonnement est partagé avec Jarvis lui-même : toutes les sessions tournent avec Sonnet (cloud comme PC, le quota est commun), le gros modèle seulement si Yannis le demande ; une seule session PC à la fois, missions courtes. Les suivis automatiques (send_later) sont autorisés mais espacés (10 à 20 min).
+5. Le quota de l'abonnement est partagé avec Jarvis lui-même : toutes les sessions tournent avec Sonnet (cloud comme PC, le quota est commun), le gros modèle seulement si Yannis le demande ; missions courtes, et pas deux sessions PC dans le même dossier en même temps. Les suivis automatiques (send_later) sont autorisés mais espacés (10 à 20 min).
 6. Avant de pousser : `PYTHONPATH=. .venv/bin/python -m pytest -q tests` (ou `.venv\Scripts\python -m pytest -q tests` sous Windows) doit passer. Chaque correction ajoute un test quand c'est possible.
 
 ## Sur le PC (sessions PC)
