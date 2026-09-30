@@ -1169,3 +1169,12 @@ def test_tableau_de_bord_indique_le_cerveau_actif(config, memory):
     assert board.state()["active_brain"] == "claude" and board.state()["codex_delegation"] == "auto"
     core.brain.active_brain = "chatgpt"
     assert board.state()["active_brain"] == "chatgpt"
+def test_app_assets_and_flag():
+    from pathlib import Path
+
+    static = Path(__file__).parent.parent / "jarvis" / "dashboard" / "static"
+    html = (static / "index.html").read_text(encoding="utf-8")
+    for name in ("sphere.js", "simple.css", "app.js"):
+        assert name in html and (static / name).exists()
+    assert "https://" not in (static / "sphere.js").read_text(encoding="utf-8")
+    import jarvis.appwindow  # importable sans pywebview (import paresseux)

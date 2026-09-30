@@ -1,0 +1,77 @@
+/* Mode Simple (par défaut) : la sphère occupe toute la scène, les panneaux s'ouvrent en tiroir
+   depuis la barre d'icônes à gauche. Le mode Détaillé (classe .app sans .simple) garde style.css tel quel. */
+
+.rail, .simple-clock, .view-toggle { display: none; }
+.view-toggle {
+  position: fixed; z-index: 16; left: 14px; bottom: 14px; padding: 6px 14px; border-radius: 999px;
+  border: 1px solid var(--line); background: color-mix(in srgb, var(--ink-2) 85%, transparent); color: var(--muted);
+  font-size: 12.5px; backdrop-filter: blur(8px); transition: color .2s, border-color .2s;
+}
+.view-toggle:hover { color: var(--text); border-color: color-mix(in srgb, var(--c) 60%, var(--line)); }
+.app:not(.simple) .view-toggle { display: block; }
+
+body:has(.app.simple) { overflow: hidden; }
+.app.simple { display: grid; grid-template-columns: 60px minmax(0, 1fr); height: 100%; min-height: 0; }
+.app.simple .today { display: none; }
+.app.simple .view-toggle { display: block; left: auto; right: 28px; bottom: auto; top: 62px; background: none; border-color: var(--line-soft); }
+.app.simple .rail {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 0; z-index: 22;
+  border-right: 1px solid var(--line-soft); background: rgba(6, 8, 13, .55); backdrop-filter: blur(10px);
+}
+.rail-gap { flex: 1; }
+.rail-btn {
+  width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 12px;
+  background: none; color: var(--faint); transition: color .2s, background .2s;
+}
+.rail-btn:hover { color: var(--text); background: var(--ink-3); }
+.rail-btn.active { color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.app.simple .simple-clock {
+  display: block; position: absolute; z-index: 5; top: 20px; right: 28px;
+  font: 500 26px/1 var(--font-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--text);
+}
+
+.app.simple .stage { position: relative; display: block; padding: 0; overflow: hidden; }
+.app.simple .stage-top { position: absolute; z-index: 5; top: 20px; left: 0; right: 0; justify-content: center; pointer-events: none; }
+.app.simple .stage-actions { display: none; }
+.app.simple .identity { flex-direction: column; gap: 8px; }
+.app.simple .name { font-size: 14px; font-weight: 400; color: var(--muted); letter-spacing: .02em; }
+.app.simple .state-pill { background: none; box-shadow: none; padding: 0; font-size: 13px; letter-spacing: .28em; text-transform: uppercase; }
+.app.simple .presence { position: absolute; inset: 0; display: block; padding: 0; }
+.app.simple #orb { position: absolute; inset: 0; width: 100%; height: 100%; mask-image: none; transition: none; }
+.app.simple .stage.compact #orb { width: 100%; height: 100%; }
+.app.simple .caption {
+  position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); width: min(720px, calc(100% - 48px));
+  max-width: none; font-size: 19px; text-shadow: 0 2px 18px #000;
+}
+.app.simple .hint { position: absolute; left: 0; right: 0; bottom: 74px; }
+.app.simple .thread { display: none; }
+.app.simple .composer {
+  position: absolute; z-index: 6; left: 50%; bottom: 26px; transform: translateX(-50%);
+  width: min(520px, calc(100% - 48px)); padding: 4px; border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-2) 55%, transparent); border-color: var(--line-soft); box-shadow: none;
+}
+.app.simple .composer input { font-size: 14.5px; padding: 8px 6px; }
+.app.simple .talk { width: 38px; height: 38px; }
+
+.app.simple .side {
+  position: fixed; z-index: 21; top: 0; bottom: 0; left: 60px; width: min(400px, calc(100vw - 60px));
+  background: color-mix(in srgb, var(--ink) 94%, transparent); backdrop-filter: blur(16px);
+  transform: translateX(calc(-100% - 60px)); visibility: hidden;
+  transition: transform .35s var(--ease), visibility 0s linear .35s;
+}
+.app.simple.drawer-open .side { transform: none; visibility: visible; transition: transform .35s var(--ease); }
+.app.simple .tabs { display: none; }
+
+@media (max-width: 800px) {
+  .app.simple { display: grid; flex-direction: initial; }
+  .app.simple .stage { min-height: 0; padding: 0; }
+  .app.simple .side { order: 0; padding-inline: 22px; border-top: 0; border-left: 1px solid var(--line-soft); }
+  .app.simple .simple-clock { font-size: 20px; right: 16px; top: 16px; }
+  .app.simple .view-toggle { right: 16px; top: 48px; }
+  .app.simple .caption { font-size: 16px; bottom: 100px; }
+}
+@media (max-width: 480px) {
+  .app.simple { grid-template-columns: 48px minmax(0, 1fr); }
+  .app.simple .side { left: 48px; width: calc(100vw - 48px); }
+  .rail-btn { width: 36px; }
+}

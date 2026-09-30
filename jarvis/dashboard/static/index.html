@@ -9,14 +9,25 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="simple.css">
 </head>
 <body>
 <div class="banner" id="offline" hidden>Connexion perdue avec l'assistant. Nouvelle tentative…</div>
 
-<div class="app" id="app" data-state="idle">
+<div class="app simple" id="app" data-state="idle">
   <!-- Lueur ambiante : reprend la couleur de l'état de l'assistant -->
   <div class="ambient" aria-hidden="true"></div>
-  <!-- Colonne « Aujourd'hui » : tout ce qu'on regarde d'un coup d'œil -->
+  <!-- Mode Simple : barre d'icônes fine, heure et bascule de vue -->
+  <nav class="rail" id="rail" aria-label="Panneaux">
+    <button class="rail-btn" data-open="memory" title="Mémoire" aria-label="Mémoire"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M12 3a5 5 0 0 0-5 5 4 4 0 0 0-2 7 4 4 0 0 0 5 4.5V3.5M12 3a5 5 0 0 1 5 5 4 4 0 0 1 2 7 4 4 0 0 1-5 4.5V3.5"/></svg></button>
+    <button class="rail-btn" data-open="tasks" title="Tâches" aria-label="Tâches"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="m5 6.5 1.5 1.5L9 5M5 12.5 6.5 14 9 11.5M5 18.5 6.5 20 9 17.5M13 7h6M13 13h6M13 19h6"/></svg></button>
+    <button class="rail-btn" data-open="activity" title="Activité" aria-label="Activité"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3-7 4 14 3-7h4"/></svg></button>
+    <button class="rail-btn" data-open="system" title="Système" aria-label="Système"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M5 5h14v10H5zM9 19h6M12 15v4"/></svg></button>
+    <span class="rail-gap"></span>
+    <button class="rail-btn" id="btn-view" title="Passer en vue détaillée" aria-label="Vue détaillée"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg></button>
+  </nav>
+  <div class="simple-clock" id="clock-simple" aria-hidden="true">--:--</div>
+  <button class="view-toggle" id="btn-view-toggle" aria-pressed="false">Détaillé</button>  <!-- Colonne « Aujourd'hui » : tout ce qu'on regarde d'un coup d'œil -->
   <aside class="today" aria-label="Aujourd'hui">
     <header class="today-head">
       <div class="clock" id="clock">--:--</div>
@@ -202,6 +213,7 @@
     <p>Ouvre le centre de commande avec le lien affiché dans la fenêtre de l'assistant au démarrage.</p>
   </div>
 </div>
+<script src="sphere.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
