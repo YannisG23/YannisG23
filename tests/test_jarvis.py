@@ -1067,3 +1067,14 @@ def test_scan_des_micros(monkeypatch):
     monkeypatch.setattr(devices, "_default_hostapi", lambda: 0)
     results = devices.scan(seconds=0.01)
     assert [r[0] for r in results] == [2, 1]  # le micro qui capte le plus en premier, les sorties ignorées
+
+
+def test_app_assets_and_flag():
+    from pathlib import Path
+
+    static = Path(__file__).parent.parent / "jarvis" / "dashboard" / "static"
+    html = (static / "index.html").read_text(encoding="utf-8")
+    for name in ("sphere.js", "simple.css", "app.js"):
+        assert name in html and (static / name).exists()
+    assert "https://" not in (static / "sphere.js").read_text(encoding="utf-8")
+    import jarvis.appwindow  # importable sans pywebview (import paresseux)
