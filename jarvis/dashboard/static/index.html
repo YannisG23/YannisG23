@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#06080d">
 <title>Centre de commande</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,7 +13,9 @@
 <body>
 <div class="banner" id="offline" hidden>Connexion perdue avec l'assistant. Nouvelle tentative…</div>
 
-<div class="app" id="app">
+<div class="app" id="app" data-state="idle">
+  <!-- Lueur ambiante : reprend la couleur de l'état de l'assistant -->
+  <div class="ambient" aria-hidden="true"></div>
   <!-- Colonne « Aujourd'hui » : tout ce qu'on regarde d'un coup d'œil -->
   <aside class="today" aria-label="Aujourd'hui">
     <header class="today-head">

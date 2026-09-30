@@ -93,11 +93,16 @@ const Orb = (() => {
     return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16));
   };
   const colors = { idle: hex("--accent"), listening: hex("--listen"), thinking: hex("--think"), speaking: hex("--speak") };
+  const TICKS = 96;
+  const TAU = Math.PI * 2;
   let state = "idle";
   let color = colors.idle.slice();
-  let mic = 0, out = 0, energy = 0.02, spin = 0, t = 0;
-  const phases = Array.from({ length: 3 }, () => Array.from({ length: 4 }, () => Math.random() * Math.PI * 2));
+  let mic = 0, out = 0, level = 0, energy = 0.02, spin = 0, t = 0, last = 0;
+  const phases = Array.from({ length: 3 }, () => Array.from({ length: 4 }, () => Math.random() * TAU));
+  const tickSeed = Array.from({ length: TICKS }, () => Math.random() * TAU);
+  const motes = Array.from({ length: 14 }, () => ({ a: Math.random() * TAU, r: 1.5 + Math.random() * 0.9, s: 0.03 + Math.random() * 0.06, z: Math.random() }));
   const ripples = [];
+  const FRAME = 1 / 40;      // 40 images/s au plus : assez fluide, léger pour Whisper qui tourne sur le même PC
 
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -105,18 +110,23 @@ const Orb = (() => {
     canvas.width = canvas.height = Math.round(size * dpr);
   }
 
-  function draw() {
+  function draw(now) {
     requestAnimationFrame(draw);
     if (document.hidden) return;
-    const w = canvas.width, c = w / 2, R = w * 0.27;
+    const dt = (now - last) / 1000;
+    if (dt < FRAME) return;
+    last = now;
+    const step = Math.min(dt, 0.1);
+    const w = canvas.width, c = w / 2, R = w * 0.25;
     const speed = reducedMotion ? 0.25 : 1;
-    t += 0.016 * speed;
-    // L'énergie suit l'état et le son : la voix de l'assistant, ou la tienne quand il écoute.
-    const target = state === "speaking" ? 0.035 + out * 0.2
-      : state === "listening" ? 0.04 + mic * 0.16
-      : state === "thinking" ? 0.06 : 0.018 + 0.008 * Math.sin(t * 1.3);
+    t += step * speed;
+    // Le niveau sonore lissé : la voix de l'assistant, ou la tienne quand il écoute.
+    level += ((state === "speaking" ? out : state === "listening" ? mic : 0) - level) * 0.25;
+    const target = state === "speaking" ? 0.03 + level * 0.2
+      : state === "listening" ? 0.035 + level * 0.16
+      : state === "thinking" ? 0.05 : 0.016 + 0.008 * Math.sin(t * 1.3);
     energy += (target - energy) * 0.18;
-    spin += (state === "thinking" ? 0.035 : 0.004) * speed;
+    spin += (state === "thinking" ? 2.1 : 0.25) * step * speed;
     const goal = colors[state] || colors.idle;
     color = color.map((v, i) => v + (goal[i] - v) * 0.06);
     const rgb = (a) => `rgba(${color.map(Math.round).join(",")},${a})`;
@@ -124,62 +134,96 @@ const Orb = (() => {
     ctx.clearRect(0, 0, w, w);
     ctx.globalCompositeOperation = "lighter";
 
-    // Halo
-    const halo = ctx.createRadialGradient(c, c, R * 0.2, c, c, R * 1.7);
-    halo.addColorStop(0, rgb(0.22 + energy));
-    halo.addColorStop(0.55, rgb(0.05));
-    halo.addColorStop(1, rgb(0));
+    // Halo large et doux
+    const halo = ctx.createRadialGradient(c, c, R * 0.4, c, c, w / 2);
+    halo.addColorStop(0, rgb(0.2 + energy * 1.4));
+    halo.addColorStop(0.4, rgb(0.07));
+    halo.addColorStop(0.7, rgb(0.015));
+    halo.addColorStop(0.92, rgb(0));
     ctx.fillStyle = halo;
     ctx.fillRect(0, 0, w, w);
 
-    // Contours vivants
+    // Couronne de graduations : elle respire au repos, suit la voix quand on parle
+    const ringR = R * 1.62;
+    ctx.lineCap = "round";
+    ctx.lineWidth = Math.max(1, w * 0.0042);
+    for (let i = 0; i < TICKS; i++) {
+      const a = (i / TICKS) * TAU - Math.PI / 2;
+      const n = Math.sin(tickSeed[i] + t * (state === "idle" ? 0.6 : 3.2)) * 0.5 + 0.5;
+      const body = state === "thinking"
+        ? Math.max(0, Math.cos(((i / TICKS) * TAU) - spin * 1.4)) ** 6
+        : (state === "idle" ? 0.12 + 0.1 * n : 0.1 + level * 1.5 * n);
+      const len = w * (0.012 + 0.05 * Math.min(1, body));
+      const alpha = state === "thinking" ? 0.16 + body * 0.75 : 0.22 + Math.min(0.6, body * 0.9);
+      ctx.strokeStyle = rgb(alpha);
+      ctx.beginPath();
+      ctx.moveTo(c + Math.cos(a) * ringR, c + Math.sin(a) * ringR);
+      ctx.lineTo(c + Math.cos(a) * (ringR + len), c + Math.sin(a) * (ringR + len));
+      ctx.stroke();
+    }
+
+    // Contours vivants autour de la sphère
     for (let k = 0; k < 3; k++) {
       ctx.beginPath();
-      const steps = 160;
+      const steps = 140;
       for (let i = 0; i <= steps; i++) {
-        const a = (i / steps) * Math.PI * 2;
+        const a = (i / steps) * TAU;
         const p = phases[k];
         const wobble = Math.sin(a * 2 + t * 0.9 + p[0]) * 0.5 + Math.sin(a * 3 - t * 1.3 + p[1]) * 0.3
           + Math.sin(a * 5 + t * 2.1 + p[2]) * 0.2 + Math.sin(a * 7 - t * 2.9 + p[3]) * 0.12;
-        const r = R * (1 + k * 0.07) + R * energy * 1.6 * wobble;
-        const x = c + Math.cos(a + spin * (k + 1) * 0.6) * r;
-        const y = c + Math.sin(a + spin * (k + 1) * 0.6) * r;
+        const r = R * (1.02 + k * 0.08) + R * energy * 1.5 * wobble;
+        const x = c + Math.cos(a + spin * (k + 1) * 0.15) * r;
+        const y = c + Math.sin(a + spin * (k + 1) * 0.15) * r;
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
-      ctx.lineWidth = w * (0.006 - k * 0.0014);
-      ctx.strokeStyle = rgb(0.75 - k * 0.22);
-      ctx.shadowColor = rgb(0.8);
-      ctx.shadowBlur = w * 0.03;
+      ctx.closePath();
+      ctx.lineWidth = w * (0.006 - k * 0.0015);
+      ctx.strokeStyle = rgb(0.7 - k * 0.22);
+      ctx.shadowColor = rgb(0.7);
+      ctx.shadowBlur = w * 0.025;
       ctx.stroke();
     }
     ctx.shadowBlur = 0;
 
-    // Cœur
-    const coreR = R * (0.52 + energy * 1.2);
-    const core = ctx.createRadialGradient(c, c, 0, c, c, coreR);
-    core.addColorStop(0, "rgba(255,255,255,0.55)");
-    core.addColorStop(0.35, rgb(0.35));
-    core.addColorStop(1, rgb(0));
-    ctx.fillStyle = core;
-    ctx.beginPath(); ctx.arc(c, c, coreR, 0, Math.PI * 2); ctx.fill();
+    // Sphère : reflet en haut à gauche, bord plus lumineux, comme du verre
+    const sr = R * (0.86 + energy * 0.9);
+    const sphere = ctx.createRadialGradient(c - sr * 0.35, c - sr * 0.4, sr * 0.05, c, c, sr);
+    sphere.addColorStop(0, "rgba(255,255,255,0.5)");
+    sphere.addColorStop(0.3, rgb(0.34));
+    sphere.addColorStop(0.85, rgb(0.14));
+    sphere.addColorStop(1, rgb(0.5));
+    ctx.fillStyle = sphere;
+    ctx.beginPath(); ctx.arc(c, c, sr, 0, TAU); ctx.fill();
 
-    // Réflexion : des particules en orbite
+    // Réflexion : trois arcs comètes qui tournent autour
     if (state === "thinking") {
-      for (let i = 0; i < 9; i++) {
-        const a = spin * 3 + (i / 9) * Math.PI * 2;
-        const r = R * (1.28 + 0.06 * Math.sin(t * 3 + i));
-        ctx.fillStyle = rgb(0.9 - (i % 3) * 0.25);
-        ctx.beginPath(); ctx.arc(c + Math.cos(a) * r, c + Math.sin(a) * r, w * 0.007, 0, Math.PI * 2); ctx.fill();
+      for (let k = 0; k < 3; k++) {
+        const base = spin * (1.2 + k * 0.25) + (k * TAU) / 3;
+        const r = R * (1.28 + k * 0.1);
+        for (let j = 0; j < 14; j++) {
+          const a = base - j * 0.045;
+          ctx.fillStyle = rgb((1 - j / 14) * 0.85);
+          ctx.beginPath(); ctx.arc(c + Math.cos(a) * r, c + Math.sin(a) * r, w * 0.0065 * (1 - j / 20), 0, TAU); ctx.fill();
+        }
+      }
+    } else {
+      // Poussières lentes autour : la présence est vivante même au repos
+      for (const m of motes) {
+        const a = m.a + t * m.s;
+        const r = R * m.r;
+        ctx.fillStyle = rgb(0.12 + 0.25 * m.z);
+        ctx.beginPath(); ctx.arc(c + Math.cos(a) * r, c + Math.sin(a) * r, w * (0.0025 + 0.0025 * m.z), 0, TAU); ctx.fill();
       }
     }
+
     // Écoute : des ondes qui partent vers l'extérieur
     if (state === "listening" && !reducedMotion && (ripples.length === 0 || t - ripples[ripples.length - 1] > 0.9)) ripples.push(t);
     for (let i = ripples.length - 1; i >= 0; i--) {
       const age = t - ripples[i];
       if (age > 2.2) { ripples.splice(i, 1); continue; }
-      ctx.strokeStyle = rgb(0.45 * (1 - age / 2.2));
+      ctx.strokeStyle = rgb(0.4 * (1 - age / 2.2));
       ctx.lineWidth = w * 0.004;
-      ctx.beginPath(); ctx.arc(c, c, R * (1.05 + age * 0.35), 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(c, c, R * (1.1 + age * 0.3), 0, TAU); ctx.stroke();
     }
     ctx.globalCompositeOperation = "source-over";
   }
@@ -200,6 +244,7 @@ function setState(state) {
   Orb.state = state;
   const pill = $("state-pill");
   pill.dataset.state = state;
+  $("app").dataset.state = state;
   $("state-label").textContent = STATE_LABELS[state] || state;
   $("btn-talk").classList.toggle("live", state === "listening");
   $("btn-stop").hidden = !(state === "thinking" || state === "speaking");
