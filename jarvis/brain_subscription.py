@@ -18,6 +18,7 @@ import platform
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 from datetime import datetime
 from types import SimpleNamespace
@@ -114,6 +115,20 @@ def _to_mcp(content: Any) -> list[dict[str, Any]]:
     return blocks
 
 
+class LimitReached(BrainError):
+    """Claude est indisponible : limite d'usage de l'abonnement. resets_at : heure de retour (epoch), si connue."""
+
+    def __init__(self, message: str, resets_at: float | None = None) -> None:
+        super().__init__(message)
+        self.resets_at = resets_at
+
+
+# Sans heure de réinitialisation connue, on retente Claude après ce délai.
+RELAY_RETRY_SECONDS = 15 * 60
+RELAY_TIMEOUT = 150
+RELAY_HISTORY = 6
+
+
 def _limit_message(info: Any) -> str:
     resets = getattr(info, "resets_at", None)
     when = ""
@@ -142,6 +157,10 @@ class SubscriptionBrain(Brain):
             os.environ.pop(var, None)
         self._client: Any = None
         self._turn_count = 0
+        # Relais Codex : heure (epoch) où l'on retente Claude, derniers échanges, échanges faits par ChatGPT.
+        self._relay_until: float | None = None
+        self._recent: collections.deque[tuple[str, str]] = collections.deque(maxlen=RELAY_HISTORY)
+        self._relay_notes: list[tuple[str, str]] = []
         # Dernières lignes d'erreur de Claude Code : indispensables pour comprendre un échec.
         self._stderr: collections.deque[str] = collections.deque(maxlen=40)
         # Sans modèle imposé dans .env : Sonnet, rapide et malin, idéal pour une conversation à la voix
@@ -237,7 +256,29 @@ class SubscriptionBrain(Brain):
     def ask(self, text: str, on_sentence: Callable[[str], None] | None = None,
             on_delta: Callable[[str], None] | None = None) -> str:
         self._cancel = False
-        prompt = f"[{spoken_timestamp(datetime.now())}] {text}{self._recall_block(text)}"
+        if self._relay_until is not None and time.time() < self._relay_until:
+            relayed = self._relay(text, on_sentence, on_delta, announce=False)
+            if relayed is not None:
+                return relayed
+        try:
+            reply = self._ask_claude(text, on_sentence, on_delta)
+        except LimitReached as limit:
+            relayed = self._relay(text, on_sentence, on_delta, announce=True, resets_at=limit.resets_at)
+            if relayed is None:
+                raise
+            return relayed
+        if self.active_brain != "claude":
+            self._set_brain("claude")
+        self._relay_until = None
+        self._recent.append((text, reply))
+        return reply
+
+    def _ask_claude(self, text: str, on_sentence, on_delta) -> str:
+        notes = ""
+        if self._relay_notes:
+            notes = ("\n\n<relais_chatgpt>Pendant que tu étais indisponible, ChatGPT a répondu à ces échanges :\n"
+                     + "\n".join(f"- {u} → {r}" for u, r in self._relay_notes) + "\n</relais_chatgpt>")
+        prompt = f"[{spoken_timestamp(datetime.now())}] {text}{self._recall_block(text)}{notes}"
         reply = ""
         for attempt in (1, 2):
             try:
@@ -255,14 +296,74 @@ class SubscriptionBrain(Brain):
                 self._drop_client()  # on repartira sur une connexion neuve
                 self._report(exc)
                 if attempt == 2:
-                    raise BrainError(self._diagnose()) from exc
+                    diagnosis = self._diagnose()
+                    if "limite" in diagnosis:
+                        raise LimitReached(diagnosis) from exc
+                    raise BrainError(diagnosis) from exc
                 # Deuxième essai : connexion neuve et modèle par défaut de l'abonnement
                 # (le modèle demandé n'est peut-être pas inclus dans ton offre).
                 self._model = None
+        self._relay_notes = []
         self._turn_count += 1
         self.memory.log("user", text, self.session_id)
         self.memory.log("assistant", reply, self.session_id)
         return reply
+
+    # ------------------------------------------------------------- relais ChatGPT
+
+    def _set_brain(self, name: str, until: float | None = None) -> None:
+        if name != self.active_brain:
+            self.active_brain = name
+            self.emit("brain", {"active": name, "until": until})
+
+    def _relay_prompt(self, text: str) -> str:
+        history = list(self._recent) + self._relay_notes
+        past = "\n".join(f"{self.config.user_name} : {u}\nToi : {r}" for u, r in history[-RELAY_HISTORY:])
+        return (
+            f"Tu es {self.config.assistant_name}, l'assistant vocal personnel de {self.config.user_name}. "
+            f"Tu remplaces temporairement Claude, indisponible. Réponds en français, à l'oral : une à trois "
+            f"phrases, sans markdown, sans liste ni émoji. Tu n'as accès ni à son PC ni à sa mémoire : si la "
+            f"demande en a besoin, dis-le simplement et propose d'attendre le retour de Claude.\n\n"
+            + (f"Derniers échanges :\n{past}\n\n" if past else "")
+            + f"Demande de {self.config.user_name} : {text}")
+
+    def _relay(self, text: str, on_sentence, on_delta, announce: bool,
+               resets_at: float | None = None) -> str | None:
+        """Répond via Codex (abonnement ChatGPT). None si Codex ne peut pas : comportement habituel."""
+        from .tools import codex_tools
+
+        if codex_tools.find_codex() is None:
+            return None
+        if announce:
+            self._relay_until = resets_at if resets_at and resets_at > time.time() else time.time() + RELAY_RETRY_SECONDS
+        try:
+            answer = codex_tools.exec_codex(self._relay_prompt(text), write=False, timeout=RELAY_TIMEOUT)
+        except codex_tools.CodexError as exc:
+            self.emit("error", {"message": f"Relais ChatGPT impossible : {exc}"})
+            self._relay_until = None
+            return None
+        self._set_brain("chatgpt", self._relay_until)
+        back = ""
+        if announce:
+            if self._relay_until:
+                back = f" Claude revient vers {datetime.fromtimestamp(self._relay_until):%H:%M}."
+            intro = f"Claude a atteint sa limite : je passe sur ChatGPT le temps qu'il revienne.{back}"
+        else:
+            intro = ""
+        full = f"{intro} {answer}".strip()
+        for sentence in ([intro] if intro else []) + [answer]:
+            if on_delta and not self._cancel:
+                on_delta(sentence + " ")
+            splitter = SentenceSplitter()
+            for part in [*splitter.feed(sentence), splitter.flush()]:
+                if part and on_sentence and not self._cancel:
+                    on_sentence(part)
+        self._relay_notes.append((text, answer))
+        self._relay_notes = self._relay_notes[-RELAY_HISTORY:]
+        self._recent.append((text, answer))
+        self.memory.log("user", text, self.session_id)
+        self.memory.log("assistant", full, self.session_id)
+        return full
 
     async def _turn(self, prompt: str, on_sentence, on_delta) -> str:
         sdk = self.sdk
@@ -277,6 +378,7 @@ class SubscriptionBrain(Brain):
         streamed: list[str] = []
         final_texts: list[str] = []
         limit_error: str | None = None
+        limit_resets: float | None = None
 
         def speak(sentence: str) -> None:
             if sentence and on_sentence and not self._cancel:
@@ -303,6 +405,8 @@ class SubscriptionBrain(Brain):
                     # On lit la réponse jusqu'au bout avant de signaler l'erreur, sinon ses
                     # derniers messages arriveraient au tour suivant.
                     limit_error = _limit_message(message.rate_limit_info)
+                    resets = getattr(message.rate_limit_info, "resets_at", None)
+                    limit_resets = float(resets) if isinstance(resets, (int, float)) else None
             elif isinstance(message, sdk.ResultMessage):
                 usage = message.usage or {}
                 self.context_tokens = sum(
@@ -312,11 +416,12 @@ class SubscriptionBrain(Brain):
                 if self._cancel:
                     raise Interrupted("Interrompu.")
                 if limit_error:
-                    raise BrainError(limit_error)
+                    raise LimitReached(limit_error, limit_resets)
                 if message.is_error:
                     detail = message.result or ", ".join(message.errors or []) or message.subtype
                     if message.api_error_status == 429 or "limit" in str(detail).lower():
-                        raise BrainError("Tu as atteint la limite d'utilisation de ton abonnement Claude pour le moment.")
+                        raise LimitReached("Tu as atteint la limite d'utilisation de ton abonnement Claude pour le moment.",
+                                           limit_resets)
                     raise BrainError(f"Claude a rencontré un problème : {detail}")
 
         speak(splitter.flush())

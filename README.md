@@ -116,6 +116,7 @@ Une routine est un enchaînement que Jarvis sait refaire à la demande : « **mo
 | `JARVIS_BRAIN` | `abonnement` (compte Claude, prix fixe) ou `api` (clé API, facturée à l'usage) | `abonnement` |
 | `JARVIS_MODEL` | Modèle Claude (`opus` pour le plus puissant, plus lent) | Sonnet (abonnement), `claude-opus-5` (api) |
 | `JARVIS_EFFORT` | Profondeur de réflexion : `low` (plus rapide), `medium`, `high` | `low` |
+| `JARVIS_CODEX_DELEGATION` | Délégation à Codex (ChatGPT) pour économiser Claude : `off` (sur demande seulement), `auto` (grosses tâches de code), `max` (tout le code) | `auto` |
 | `JARVIS_VOICE` | Voix (`edge-tts --list-voices`) | `fr-FR-RemyMultilingualNeural` |
 | `JARVIS_VOICE_RATE` | Débit de parole | `+5%` |
 | `JARVIS_WHISPER_MODEL` | Précision de l'écoute : `base`, `small`, `medium`, `large-v3` | `small` |
