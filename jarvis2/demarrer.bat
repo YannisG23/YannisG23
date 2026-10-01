@@ -13,6 +13,8 @@ if not exist node_modules (
 REM Python de Jarvis (outils memoire/Windows) : le .venv de J:\IAMAISON\Jarvis par defaut.
 if "%JARVIS_PY%"=="" if exist "J:\IAMAISON\Jarvis\.venv\Scripts\python.exe" set "JARVIS_PY=J:\IAMAISON\Jarvis\.venv\Scripts\python.exe"
 if "%JARVIS_PY_HOME%"=="" if exist "J:\IAMAISON\Jarvis\jarvis" set "JARVIS_PY_HOME=J:\IAMAISON\Jarvis"
+REM Le serveur d'outils a besoin du paquet mcp (serie 1.x) dans ce Python.
+if not "%JARVIS_PY%"=="" "%JARVIS_PY%" -c "import mcp" 2>nul || if not "%JARVIS_PY%"=="" "%JARVIS_PY%" -m pip install -q "mcp>=1.2,<2"
 
 REM Ouvre Chrome sur l'interface quand le serveur a eu le temps de demarrer.
 start "" /b cmd /c "timeout /t 8 /nobreak >nul & start chrome http://localhost:5173"

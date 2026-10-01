@@ -275,7 +275,7 @@ const VETO_EXEMPT = new Set([
   'openrouter__send-feedback',
 ])
 
-function decideTool(name) {
+function decideTool(name, input) {
   if (READ_ONLY_BUILTINS.has(name)) return true
   if (WRITE_BUILTINS.has(name)) return ALLOW_WRITES
 
@@ -305,7 +305,10 @@ function decideTool(name) {
     // Le Jarvis Python de Yannis (mémoire, Windows, tâches, Codex…). Les actions
     // sensibles se confirment elles-mêmes : l'outil refuse tant que `confirme: true`
     // n'est pas passé, et la persona doit d'abord demander à Yannis.
-    if (server === 'jarvis_py') return true
+    // Mais `confirme: true` est un argument que le modèle peut poser lui-même (par exemple
+    // trompé par le contenu d'un e-mail) : l'exécution d'une action sensible confirmée
+    // suit donc la même règle que les autres écritures, autorisée seulement en mode --writes.
+    if (server === 'jarvis_py') return input?.confirme === true ? ALLOW_WRITES : true
 
     const tool = mcpToolOf(name)
     if (EFFECTFUL_VERB.test(tool) && !VETO_EXEMPT.has(`${server}__${tool}`)) {
@@ -1277,8 +1280,8 @@ wss.on('connection', (socket) => {
       // through a `Bash: echo hello` without asking, and only reaches us for
       // something with a consequence, like a `touch`. So a deny here is
       // reliable; an absence of a call here is not proof nothing ran.
-      canUseTool: async (toolName) => {
-        const ok = decideTool(toolName)
+      canUseTool: async (toolName, input) => {
+        const ok = decideTool(toolName, input)
         console.log(`[jarvis] tool ${toolName} -> ${ok ? 'allow' : 'deny'}`)
         return ok
           ? { behavior: 'allow' }
@@ -1287,9 +1290,9 @@ wss.on('connection', (socket) => {
               // Every word of this can end up spoken, so it carries no command
               // to read out — the persona is forbidden from saying one aloud.
               message:
-                'Blocked: JARVIS is running in read-only mode and cannot take' +
-                ' actions that change anything. Tell the user this action is' +
-                ' unavailable until they enable write access on the machine.',
+                'Bloqué : Jarvis tourne en mode lecture seule et ne peut pas faire' +
+                ' d\'action qui modifie quelque chose. Dis à Yannis que cette action' +
+                ' demande de relancer Jarvis 2 avec demarrer.bat --writes.',
             }
       },
     },

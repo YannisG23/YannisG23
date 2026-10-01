@@ -44,7 +44,7 @@ app = [
 ]
 # Serveur MCP (python -m jarvis.mcp_server) : branche ce Jarvis dans Jarvis 2.
 mcp = [
-    "mcp>=1.2",
+    "mcp>=1.2,<2",  # la 2.x a changé l API du serveur bas niveau
 ]
 all = ["jarvis[voice,google,app,mcp]"]
 dev = ["pytest>=8"]
