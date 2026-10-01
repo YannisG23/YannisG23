@@ -105,6 +105,7 @@ function renderInfo() {
   $("input").placeholder = `Écris une demande à ${name}…`;
   $("k-model").textContent = info.model || "–";
   $("k-brain").textContent = info.brain || "–";
+  renderUsage(info.usage);
   $("k-effort").textContent = { low: "rapide", medium: "équilibrée", high: "approfondie", xhigh: "très approfondie", max: "maximale" }[info.effort] || info.effort || "–";
   $("k-voice").textContent = !info.voice_enabled ? "désactivée" : info.tts === "ElevenLabs" ? "ElevenLabs" : (info.voice || "–").replace(/Neural$/, "");
   const pct = info.max_context_tokens ? Math.min(100, (100 * (info.context_tokens || 0)) / info.max_context_tokens) : 0;
@@ -692,3 +693,20 @@ async function main() {
 }
 
 main();
+
+
+// Consommation des cerveaux : quota Claude (pourcentage réel quand il est connu) et budget OpenAI.
+function renderUsage(u) {
+  if (!u) return;
+  const c = u.claude || {}, g = u.gpt || {}, x = u.codex || {};
+  const util = typeof c.utilization === "number" ? c.utilization : null;
+  $("m-claude").style.width = util === null ? "0%" : Math.min(100, Math.round(util * 100)) + "%";
+  let claude = util === null ? `${(c.today || {}).calls || 0} demandes aujourd'hui` : `${Math.round(util * 100)} %`;
+  if (c.resets_at) claude += ` · retour ${new Date(c.resets_at * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+  if (c.economy) claude += " · mode économie";
+  $("v-claude").textContent = claude;
+  const spent = (g.month || {}).cost || 0, budget = g.budget || 0;
+  $("m-gpt").style.width = budget ? Math.min(100, Math.round((spent / budget) * 100)) + "%" : "0%";
+  $("v-gpt").textContent = `${spent.toFixed(2)} $ / ${budget.toFixed(0)} $` + (g.over_budget ? " · budget atteint" : "");
+  $("v-codex").textContent = `${(x.today || {}).calls || 0} tâches`;
+}

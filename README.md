@@ -70,6 +70,10 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 
 Mets une clé API OpenAI dans `.env` (`OPENAI_API_KEY=sk-...`, créée sur platform.openai.com, facturée à l'usage : quelques euros par mois ; pense à fixer un plafond). ChatGPT (`JARVIS_GPT_MODEL`, un petit modèle rapide) mène alors la conversation et répond presque instantanément ; dès qu'il faut agir (PC, fichiers, e-mails, agenda, mémoire, web), il confie la tâche à Claude, qui a tous les outils et demande toujours tes confirmations. Ton quota Claude ne sert plus qu'aux vraies actions. Si l'API OpenAI est indisponible, Claude répond à tout. `JARVIS_CONVERSATION=claude` pour revenir au tout-Claude.
 
+### Consommation et équilibrage
+
+Jarvis mesure ce qu'il consomme (panneau Système de l'appli, ou demande-lui « où en est ma consommation ? ») : pourcentage réel du quota Claude et heure de réinitialisation, dépenses OpenAI du mois face à `JARVIS_OPENAI_BUDGET`, nombre de tâches Codex. Il s'équilibre tout seul : quota Claude au-delà de 75 % (ou alerte) → mode économie avec Haiku jusqu'à la réinitialisation ; budget OpenAI atteint → Claude reprend la conversation.
+
 ### Connecter Codex (optionnel, abonnement ChatGPT)
 
 Codex, l'IA de code d'OpenAI, sert de **deuxième cerveau** : « demande l'avis de Codex », « fais analyser ce projet par Codex ». Ce qu'il fait consomme ton abonnement ChatGPT, pas ton quota Claude.

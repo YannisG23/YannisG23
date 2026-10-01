@@ -285,3 +285,14 @@ def run_command(command: str, reason: str = "") -> str:
         return "La commande a dépassé 120 secondes et a été arrêtée."
     output = (result.stdout or "") + (("\n[stderr]\n" + result.stderr) if result.stderr else "")
     return _truncate(f"Code de sortie : {result.returncode}\n{output.strip()}")
+
+
+@registry.tool(
+    "Consommation des cerveaux : quota Claude utilisé (et heure de réinitialisation), dépenses OpenAI du mois "
+    "par rapport au budget, nombre de tâches Codex. À utiliser quand l'utilisateur demande sa consommation, "
+    "ses crédits ou son quota.",
+)
+def usage_report() -> str:
+    from .. import usage
+
+    return usage.current.spoken() if usage.current is not None else "Compteur indisponible."

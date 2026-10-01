@@ -24,6 +24,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, Callable
 
+from . import usage
 from .brain import CONSOLIDATION_SCHEMA, Brain, BrainError, Interrupted, SentenceSplitter, spoken_timestamp
 
 SERVER = "jarvis"
@@ -142,6 +143,7 @@ class _NoApiClient:
 
 
 SUBSCRIPTION_DEFAULT_MODEL = "sonnet"
+ECONOMY_MODEL = "haiku"
 
 
 class SubscriptionBrain(Brain):
@@ -157,6 +159,7 @@ class SubscriptionBrain(Brain):
             os.environ.pop(var, None)
         self._client: Any = None
         self._turn_count = 0
+        self._economy = False
         # Relais Codex : heure (epoch) où l'on retente Claude, derniers échanges, échanges faits par ChatGPT.
         self._relay_until: float | None = None
         self._recent: collections.deque[tuple[str, str]] = collections.deque(maxlen=RELAY_HISTORY)
@@ -267,11 +270,28 @@ class SubscriptionBrain(Brain):
             if relayed is None:
                 raise
             return relayed
+        self._balance()
         if self.active_brain != "claude":
             self._set_brain("claude")
         self._relay_until = None
         self._recent.append((text, reply))
         return reply
+
+    def _balance(self) -> None:
+        """Quota Claude tendu → Haiku (bien moins gourmand) jusqu'à la réinitialisation ; puis retour à Sonnet."""
+        if usage.current is None or self.config.model_is_explicit:
+            return
+        tight = usage.current.claude_tight
+        if tight and not self._economy:
+            self._economy, self._model = True, ECONOMY_MODEL
+            self._drop_client()  # le prochain tour repart avec le modèle économe
+            self.emit("usage", {"economy": True})
+            self.emit("error", {"message": "Quota Claude bientôt atteint : je passe en mode économie (Haiku) "
+                                           "jusqu'à sa réinitialisation."})
+        elif not tight and self._economy:
+            self._economy, self._model = False, SUBSCRIPTION_DEFAULT_MODEL
+            self._drop_client()
+            self.emit("usage", {"economy": False})
 
     def _ask_claude(self, text: str, on_sentence, on_delta) -> str:
         notes = ""
@@ -403,6 +423,11 @@ class SubscriptionBrain(Brain):
             elif isinstance(message, sdk.AssistantMessage) and message.parent_tool_use_id is None:
                 final_texts += [b.text for b in message.content if isinstance(b, sdk.TextBlock)]
             elif isinstance(message, sdk.RateLimitEvent):
+                info = message.rate_limit_info
+                if usage.current is not None:
+                    resets_at = getattr(info, "resets_at", None)
+                    usage.current.claude_status(getattr(info, "status", "") or "", getattr(info, "utilization", None),
+                                                float(resets_at) if isinstance(resets_at, (int, float)) else None)
                 if getattr(message.rate_limit_info, "status", "") == "rejected":
                     # On lit la réponse jusqu'au bout avant de signaler l'erreur, sinon ses
                     # derniers messages arriveraient au tour suivant.
@@ -410,11 +435,14 @@ class SubscriptionBrain(Brain):
                     resets = getattr(message.rate_limit_info, "resets_at", None)
                     limit_resets = float(resets) if isinstance(resets, (int, float)) else None
             elif isinstance(message, sdk.ResultMessage):
-                usage = message.usage or {}
+                tokens = message.usage or {}
                 self.context_tokens = sum(
-                    int(usage.get(k) or 0)
+                    int(tokens.get(k) or 0)
                     for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens")
                 )
+                if usage.current is not None:
+                    usage.current.record("claude", self.context_tokens - int(tokens.get("output_tokens") or 0),
+                                         int(tokens.get("output_tokens") or 0), message.total_cost_usd)
                 if self._cancel:
                     raise Interrupted("Interrompu.")
                 if limit_error:

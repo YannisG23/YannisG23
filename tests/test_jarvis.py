@@ -1298,3 +1298,38 @@ def test_voix_auto_elevenlabs_si_cle(monkeypatch, tmp_path):
     assert Config().tts_engine == "elevenlabs"
     monkeypatch.setenv("ELEVENLABS_API_KEY", "")
     assert Config().tts_engine == "edge"
+
+
+def test_compteur_de_consommation(tmp_path):
+    import time as _t
+
+    from jarvis.usage import UsageTracker
+
+    u = UsageTracker(tmp_path / "usage.json", openai_budget=1.0, price_in=0.4, price_out=1.6)
+    u.record("gpt", 1_000_000, 0)
+    assert round(u.month("gpt")["cost"], 2) == 0.40 and not u.openai_over_budget
+    u.record("gpt", 0, 1_000_000)
+    assert u.openai_over_budget  # 2,00 $ > 1 $
+    assert not u.claude_tight
+    u.claude_status("allowed", 0.8, _t.time() + 3600)
+    assert u.claude_tight and "80 %" in u.spoken()
+    u.claude_status("allowed", 0.8, _t.time() - 10)  # fenêtre réinitialisée
+    assert not u.claude_tight
+    assert UsageTracker(tmp_path / "usage.json").month("gpt")["calls"] == 2  # persistant
+
+
+def test_chatgpt_coupe_au_dela_du_budget(config, memory, tmp_path):
+    from jarvis import usage
+    from jarvis.brain_gpt import ConversationBrain
+    from jarvis.usage import UsageTracker
+
+    config.openai_api_key = "sk-test"
+    tracker = UsageTracker(tmp_path / "u.json", openai_budget=0.000001)
+    tracker.record("gpt", 1000, 1000)
+    usage.current = tracker
+    try:
+        claude = _FakeClaude(memory, reply="Claude répond.")
+        brain = ConversationBrain(config, claude, session=_FakeOpenAI())
+        assert brain.ask("Salut") == "Claude répond."
+    finally:
+        usage.current = None

@@ -16,6 +16,7 @@ import threading
 from datetime import datetime
 from typing import Any, Callable
 
+from . import usage
 from .brain import (
     CONSOLIDATION_PROMPT,
     CONSOLIDATION_SCHEMA,
@@ -140,7 +141,9 @@ class ConversationBrain:
     def _system(self) -> str:
         persona, profile = (block["text"] for block in self.claude.system)
         rules = GPT_RULES.format(name=self.config.assistant_name, user=self.config.user_name)
-        return f"{rules}\n\n{persona}\n\n{profile}"
+        conso = f"\n\n# Consommation actuelle (si {self.config.user_name} la demande)\n{usage.current.spoken()}" \
+            if usage.current is not None else ""
+        return f"{rules}\n\n{persona}\n\n{profile}{conso}"
 
     def _set_brain(self, name: str) -> None:
         if name != self.active_brain:
@@ -227,10 +230,13 @@ class ConversationBrain:
         return response
 
     def _stream(self, tools, on_sentence, on_delta) -> tuple[str, list[dict[str, Any]]]:
+        if usage.current is not None and usage.current.openai_over_budget:
+            raise GptUnavailable(f"budget OpenAI du mois atteint ({usage.current.openai_budget:.0f} $)")
         payload: dict[str, Any] = {
             "model": self.config.gpt_model,
             "messages": [{"role": "system", "content": self._system()}, *self.history],
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
         if tools:
             payload["tools"] = tools
@@ -254,6 +260,9 @@ class ConversationBrain:
                 if data == "[DONE]":
                     break
                 chunk = json.loads(data)
+                if chunk.get("usage") and usage.current is not None:
+                    u = chunk["usage"]
+                    usage.current.record("gpt", u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
                 if not chunk.get("choices"):
                     continue
                 delta = chunk["choices"][0].get("delta") or {}

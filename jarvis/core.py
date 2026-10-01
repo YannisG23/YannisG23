@@ -94,6 +94,11 @@ class Core:
         if hasattr(self.speaker, "on_play"):
             # Sous-titre synchronisé : la phrase s'affiche quand elle commence à être dite.
             self.speaker.on_play = lambda text: self.bus.publish("caption", {"text": text})
+        from . import usage as usage_mod
+
+        self.usage = usage_mod.UsageTracker(config.home / "usage.json", config.openai_budget,
+                                            config.gpt_price_in, config.gpt_price_out)
+        usage_mod.current = self.usage
         if config.uses_subscription and client is None:
             from .brain_subscription import SubscriptionBrain
 

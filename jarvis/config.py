@@ -85,6 +85,12 @@ class Config:
     # Modèle ChatGPT de conversation : petit et rapide (facturé à l'usage sur la clé API).
     gpt_model: str = field(default_factory=lambda: _env("JARVIS_GPT_MODEL", "gpt-4.1-mini"))
 
+    # Budget mensuel OpenAI en dollars (au-delà, Claude reprend la conversation) et prix du modèle
+    # en dollars par million de jetons (entrée / sortie), pour estimer la dépense.
+    openai_budget: float = field(default_factory=lambda: float(_env("JARVIS_OPENAI_BUDGET", "10")))
+    gpt_price_in: float = field(default_factory=lambda: float(_env("JARVIS_GPT_PRICE_IN", "0.40")))
+    gpt_price_out: float = field(default_factory=lambda: float(_env("JARVIS_GPT_PRICE_OUT", "1.60")))
+
     # Délégation à Codex (abonnement ChatGPT) pour économiser le quota Claude :
     # « off » (seulement sur demande), « auto » (grosses tâches de code), « max » (dès que c'est possible).
     codex_delegation: str = field(default_factory=lambda: _env("JARVIS_CODEX_DELEGATION", "auto").lower())

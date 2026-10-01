@@ -86,6 +86,10 @@ def exec_codex(prompt: str, folder: str = "", write: bool = False, timeout: int 
         if "login" in detail.lower() or "auth" in detail.lower():
             raise CodexError("Codex n'est pas connecté à ton compte ChatGPT : lance connexion-codex.bat.")
         raise CodexError(f"Codex a échoué (code {result.returncode}) : {detail or 'aucun détail'}")
+    from .. import usage
+
+    if usage.current is not None:
+        usage.current.record("codex")
     result_text = answer or (result.stdout or "").strip()[-6000:]
     if not result_text:
         raise CodexError("Codex n'a rien répondu.")
