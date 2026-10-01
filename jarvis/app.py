@@ -76,6 +76,18 @@ NAMING_PROMPT = (
 )
 
 
+def _already_running(config: Config) -> bool:
+    """Un autre Jarvis occupe déjà le port du centre de commande."""
+    import socket
+
+    with socket.socket() as sock:
+        try:
+            sock.bind(("127.0.0.1", config.dashboard_port))
+        except OSError:
+            return True
+    return False
+
+
 def _wait_forever() -> None:
     while True:
         time.sleep(3600)
@@ -133,6 +145,11 @@ def _ensure_claude_login(config: Config) -> None:
 
 def run(config: Config, voice: bool = True, dashboard: bool = True, open_browser: bool = True,
         window: bool = False) -> None:
+    if dashboard and _already_running(config):
+        console.print(f"[yellow]{escape(config.assistant_name)} est déjà ouvert dans une autre fenêtre (port "
+                      f"{config.dashboard_port} occupé). Ferme l'autre fenêtre noire de Jarvis, puis relance-moi : "
+                      "deux Jarvis en même temps se répondraient l'un sur l'autre.[/]")
+        return
     _ensure_claude_login(config)
     speaker = None
     if voice:

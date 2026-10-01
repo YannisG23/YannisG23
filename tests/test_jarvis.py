@@ -1390,3 +1390,16 @@ def test_chatgpt_utilise_ses_outils_selon_l_equilibre(config, memory, tmp_path):
         assert brain.ask("Salut") == claude.reply and claude.orders == ["Salut"]
     finally:
         usage.current = None
+
+
+def test_un_seul_jarvis_a_la_fois(config):
+    import socket
+
+    from jarvis.app import _already_running
+
+    with socket.socket() as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen()
+        config.dashboard_port = busy.getsockname()[1]
+        assert _already_running(config)
+    assert not _already_running(config)

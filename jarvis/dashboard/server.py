@@ -11,6 +11,7 @@ import json
 import queue
 import re
 import secrets
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -45,13 +46,19 @@ class _Cache:
             self._data.pop(key, None)
 
 
+class _Server(ThreadingHTTPServer):
+    # Sous Windows, SO_REUSEADDR laisserait un deuxième Jarvis écouter le même port sans erreur :
+    # deux assistants répondraient alors en même temps. On refuse donc de partager le port.
+    allow_reuse_address = sys.platform != "win32"
+
+
 class Dashboard:
     def __init__(self, core: Any, port: int) -> None:
         self.core = core
         self.port = port
         self.token = secrets.token_urlsafe(24)
         self.cache = _Cache()
-        self.server = ThreadingHTTPServer(("127.0.0.1", port), self._handler())
+        self.server = _Server(("127.0.0.1", port), self._handler())
         self.server.daemon_threads = True
 
     @property
