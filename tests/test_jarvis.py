@@ -1548,3 +1548,18 @@ def test_pas_deux_fois_la_meme_phrase():
     for sentence in ("Je regarde ça.", "Je regarde ça !", "Il est 18 h.", "Je regarde ça."):
         say(sentence)
     assert said == ["Je regarde ça.", "Il est 18 h."]
+
+
+def test_chatgpt_se_souvient_de_sa_reponse(config, memory):
+    """Sans sa réponse dans l'historique, il répondait de nouveau à la première question."""
+    from jarvis.brain_gpt import ConversationBrain
+
+    config.openai_api_key = "sk-test"
+    http = _FakeOpenAI(_SSE([_delta(content="Je t'entends parfaitement.")]),
+                       _SSE([_delta(content="Tu as trois nouveaux mails.")]))
+    brain = ConversationBrain(config, _FakeClaude(memory), session=http)
+    brain.ask("Tu m'entends ?")
+    brain.ask("Vérifie mes mails")
+    roles = [m["role"] for m in http.payloads[1]["messages"]]
+    assert roles == ["system", "user", "assistant", "user"]
+    assert http.payloads[1]["messages"][2]["content"] == "Je t'entends parfaitement."

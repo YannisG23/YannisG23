@@ -222,6 +222,9 @@ class ConversationBrain:
             if text:
                 spoken.append(text)
             if not calls:
+                # Sa réponse doit rester dans l'historique : sinon, à la question suivante, il voit deux
+                # questions d'affilée sans réponse et répond de nouveau à la première.
+                self.history.append({"role": "assistant", "content": text or " ".join(spoken).strip() or "…"})
                 return " ".join(spoken).strip()
             self.history.append({"role": "assistant", "content": text or None, "tool_calls": calls})
             for call in calls:
