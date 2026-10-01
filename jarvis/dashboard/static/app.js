@@ -265,6 +265,7 @@ function handleEvent(ev, replay = false) {
     case "memory_changed": if (!replay) { loadMemory(); refreshState(); } break;
     case "wake": $("hint").textContent = "Je t'écoute…"; break;
     case "barge_in": addActivity("Interrompu à la voix"); break;
+    case "echo": addActivity("Écho de sa propre voix ignoré"); break;
     case "renamed":
       if (!replay) { toast(`Je m'appelle maintenant ${d.name}. Appelle-moi par ce nom.`); refreshState(); }
       break;

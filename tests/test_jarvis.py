@@ -1421,6 +1421,7 @@ def _bare_listener(frames, online_key=""):
     listener.openai_key, listener.stt_model, listener._online_failures = online_key, "gpt-4o-mini-transcribe", 0
     listener.language, listener.name, listener.device = "fr", "Jarvis", "cpu"
     listener.on_warning = lambda message: None
+    listener.echo_gain = 1.0
     return listener
 
 
@@ -1511,3 +1512,39 @@ def test_couper_la_parole_a_la_voix(config, memory):
     loop._step()
     assert stops and "barge_in" in events
     assert submitted == [("attends, plutôt la météo de demain", "voice")]
+
+
+def test_echo_de_sa_propre_voix():
+    from jarvis.voice.echo import is_echo
+
+    recent = [(100.0, "Il fera 18 degrés demain à Paris, avec un peu de soleil l'après-midi.")]
+    assert is_echo("il fera 18 degrés demain à Paris avec un peu de soleil", recent, now=102.0)
+    assert not is_echo("et après-demain il fera beau ?", recent, now=102.0)
+    assert not is_echo("oui merci", recent, now=102.0)  # trop court pour juger
+    assert not is_echo("il fera 18 degrés demain à Paris avec un peu de soleil", recent, now=200.0)  # trop ancien
+    assert is_echo("18 degrés demain à Paris", [(float("inf"), recent[0][1])], now=999.0)  # en train de le dire
+
+
+def test_echo_non_soumis_et_detection_durcie(config, memory):
+    from jarvis.voice.loop import VoiceLoop
+
+    core = Core(config, memory=memory, client=FakeClient())
+    submitted = []
+    core.submit = lambda text, source="text": submitted.append(text)
+    core.speaker = SimpleNamespace(speaking=False, recent=[(float("inf"), "Je lance ta playlist de rap tout de suite.")])
+    listener = SimpleNamespace(has_wake_word=False, wake_threshold=0.5, echo_gain=1.0)
+    loop = VoiceLoop(core, listener)
+    loop._submit("je lance ta playlist de rap tout de suite")
+    assert submitted == [] and listener.echo_gain > 1.0
+    loop._submit("non mets plutôt du jazz")
+    assert submitted == ["non mets plutôt du jazz"]
+
+
+def test_pas_deux_fois_la_meme_phrase():
+    from jarvis.brain_gpt import _once_per_turn
+
+    said = []
+    say = _once_per_turn(said.append)
+    for sentence in ("Je regarde ça.", "Je regarde ça !", "Il est 18 h.", "Je regarde ça."):
+        say(sentence)
+    assert said == ["Je regarde ça.", "Il est 18 h."]

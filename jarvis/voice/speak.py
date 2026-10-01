@@ -7,6 +7,7 @@ synthétisée, ce qui donne une élocution fluide dès le premier mot de la rép
 from __future__ import annotations
 
 import asyncio
+import collections
 import queue
 import re
 import tempfile
@@ -126,6 +127,8 @@ class Speaker:
         self.openai = openai if openai and openai.get("api_key") else None
         self.on_warning = on_warning or (lambda message: None)
         self.on_play: Callable[[str], None] = lambda text: None  # phrase qui commence à être dite
+        # Ce qu'il a dit récemment (moment de fin, phrase) : pour reconnaître sa propre voix captée par le micro.
+        self.recent: collections.deque[tuple[float, str]] = collections.deque(maxlen=12)
         self._envelope: np.ndarray | None = None  # volume de la phrase en cours, par tranches de 40 ms
         self._play_started = 0.0
         self.on_state = on_state or (lambda speaking: None)
@@ -235,8 +238,10 @@ class Speaker:
                     self._envelope = _envelope(audio)
                     self._play_started = time.monotonic()
                     self.on_play(text)
+                    self.recent.append((float("inf"), text))  # en cours
                     sd.play(audio, samplerate=SAMPLE_RATE)
                     sd.wait()
+                    self.recent[-1] = (time.monotonic(), text)
             except Exception:
                 pass
             finally:

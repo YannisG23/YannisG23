@@ -12,6 +12,7 @@ directement à Claude, comme avant.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from datetime import datetime
 from typing import Any, Callable
@@ -184,6 +185,7 @@ class ConversationBrain:
     def ask(self, text: str, on_sentence: Callable[[str], None] | None = None,
             on_delta: Callable[[str], None] | None = None) -> str:
         self._cancel = False
+        on_sentence = _once_per_turn(on_sentence)
         content = f"[{spoken_timestamp(datetime.now())}] {text}{self.claude._recall_block(text)}"
         start = len(self.history)
         self.history.append({"role": "user", "content": content})
@@ -363,3 +365,20 @@ class ConversationBrain:
             return self._claude_summarize(transcript, known)
         content = response.json()["choices"][0]["message"].get("content") or ""
         return json.loads(content) if content else None
+
+
+def _once_per_turn(on_sentence: Callable[[str], None] | None) -> Callable[[str], None] | None:
+    """Ne dit pas deux fois la même phrase dans une réponse (ChatGPT qui se reprend après un outil,
+    ou Claude qui reprend la main en cours de route)."""
+    if on_sentence is None:
+        return None
+    said: set[str] = set()
+
+    def say(sentence: str) -> None:
+        key = " ".join(re.findall(r"\w+", sentence.lower()))
+        if key and key in said:
+            return
+        said.add(key)
+        on_sentence(sentence)
+
+    return say

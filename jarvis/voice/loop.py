@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from .echo import is_echo
 from .wakename import NameSpotter
 
 SAMPLE_RATE = 16000
@@ -70,6 +71,21 @@ class VoiceLoop:
 
     # ------------------------------------------------------------------ écoute
 
+    def _is_echo(self, text: str) -> bool:
+        """Sa propre voix revenue par le micro : à ignorer (sinon il se répond et se répète)."""
+        recent = getattr(self.core.speaker, "recent", None)
+        if not text or not recent or not is_echo(text, list(recent), time.monotonic()):
+            return False
+        self.core.bus.publish("echo", {"text": text})
+        # Il s'entend : on durcit la détection de prise de parole pour la suite de la session.
+        if hasattr(self.listener, "echo_gain"):
+            self.listener.echo_gain = min(8.0, self.listener.echo_gain * 1.5)
+        return True
+
+    def _submit(self, text: str) -> None:
+        if text and not self._is_echo(text):
+            self.core.submit(text, "voice")
+
     def _listen(self, start_timeout: float) -> str:
         previous = self.core.state
         self.core.set_state("listening")
@@ -121,6 +137,8 @@ class VoiceLoop:
             self.core.stop_speaking()
             audio = self.listener.record_utterance(start_timeout=0.5, prefix=onset)
             text = self.listener.transcribe(audio) if audio is not None else ""
+            if self._is_echo(text):
+                return False, ""
             return True, text
         if self.spotter:
             return self._overheard(max_seconds=5)
@@ -161,7 +179,7 @@ class VoiceLoop:
                 core.stop_speaking()
                 core.bus.publish("barge_in")
                 if command:
-                    core.submit(command, "voice")
+                    self._submit(command)
                 elif self.core.config.barge_in == "voix":
                     core.awaiting_follow_up = True  # rien de compris : il écoute la suite sans qu'on le rappelle
                 else:
@@ -174,8 +192,7 @@ class VoiceLoop:
             self._push_to_talk.clear()
             listener.flush()
             text = self._listen(core.config.follow_up_seconds)
-            if text:
-                core.submit(text, "voice")
+            self._submit(text)
             return
 
         called, command = self._called()
@@ -183,13 +200,11 @@ class VoiceLoop:
             return
         core.bus.publish("wake")
         if command:
-            core.submit(command, "voice")
+            self._submit(command)
             return
         beep()
         listener.flush()
-        text = self._listen(6.0)
-        if text:
-            core.submit(text, "voice")
+        self._submit(self._listen(6.0))
 
 
 def beep() -> None:

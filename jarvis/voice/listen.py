@@ -108,6 +108,7 @@ class Listener:
         self.stt_model = stt_model
         self.on_warning = on_warning or (lambda message: None)
         self._online_failures = 0
+        self.echo_gain = 1.0
         self.language = language
         self.wake_threshold = wake_threshold
         self.stt, self.device = load_whisper(whisper_model)
@@ -204,7 +205,8 @@ class Listener:
         Renvoie le début de la phrase (pour ne pas le perdre), ou None. Au casque, sa propre voix
         n'arrive pas dans le micro : toute voix entendue est celle de l'utilisateur.
         """
-        threshold = self.speech_threshold
+        # echo_gain grandit chaque fois qu'il s'est entendu lui-même : il faut alors parler plus fort que l'écho.
+        threshold = self.speech_threshold * self.echo_gain
         frame_seconds = FRAME / SAMPLE_RATE
         frames: list[np.ndarray] = []
         loud_for, gap = 0.0, 0
