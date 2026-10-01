@@ -63,8 +63,8 @@ Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda
 1. Va sur https://console.cloud.google.com, crée un projet, puis active **Gmail API** et **Google Calendar API**.
 2. Dans *Google Auth Platform* : écran de consentement en mode « Externe », puis ajoute ton adresse Gmail comme **utilisateur test**.
 3. *Clients* → *Créer un client* → type **Application de bureau** → télécharge le JSON.
-4. Renomme-le `google_credentials.json` et place-le dans `~/.jarvis/` (sous Windows : `C:\Users\<toi>\.jarvis\`).
-5. Lance `python -m jarvis --setup-google` et accepte les autorisations dans le navigateur.
+4. Sous Windows : double-clique sur `connexion-google.bat` (il récupère le fichier dans Téléchargements, installe ce qu'il faut et ouvre la page d'autorisation).
+   Ailleurs : renomme-le `google_credentials.json`, place-le dans `~/.jarvis/`, puis lance `python -m jarvis --setup-google`.
 
 ### ChatGPT pour parler, Claude pour agir (optionnel, clé API OpenAI)
 
