@@ -72,7 +72,12 @@ Mets une clé API OpenAI dans `.env` (`OPENAI_API_KEY=sk-...`, créée sur platf
 
 ### Consommation et équilibrage
 
-Jarvis mesure ce qu'il consomme (panneau Système de l'appli, ou demande-lui « où en est ma consommation ? ») : pourcentage réel du quota Claude et heure de réinitialisation, dépenses OpenAI du mois face à `JARVIS_OPENAI_BUDGET`, nombre de tâches Codex. Il s'équilibre tout seul : quota Claude au-delà de 75 % (ou alerte) → mode économie avec Haiku jusqu'à la réinitialisation ; budget OpenAI atteint → Claude reprend la conversation.
+Jarvis mesure ce qu'il consomme (panneau Système de l'appli, ou « où en est ma consommation ? ») : pourcentage réel du quota Claude et heure de réinitialisation, dépenses OpenAI du mois face à `JARVIS_OPENAI_BUDGET`, tâches Codex.
+
+Il répartit le travail **au rythme**, en continu, plutôt que d'épuiser un cerveau avant de passer à l'autre :
+- **équilibré** : ChatGPT converse et fait lui-même les actions simples (outils sans confirmation) ; Claude garde les tâches en plusieurs étapes, le code, Claude Code et tout ce que tu lui demandes explicitement.
+- **Claude consomme plus vite que sa fenêtre ne s'écoule** (15 points d'avance) : ChatGPT prend presque tous les outils, y compris ceux à confirmer ; Claude reste disponible pour ce qui lui est propre. Au-delà de 75 % du quota, Claude passe aussi sur Haiku jusqu'à la réinitialisation.
+- **Dépenses OpenAI en avance sur le mois** : Claude reprend la conversation jusqu'à ce que le rythme redevienne normal (et au-delà du budget, ChatGPT s'arrête).
 
 ### Connecter Codex (optionnel, abonnement ChatGPT)
 

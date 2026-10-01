@@ -1333,3 +1333,60 @@ def test_chatgpt_coupe_au_dela_du_budget(config, memory, tmp_path):
         assert brain.ask("Salut") == "Claude répond."
     finally:
         usage.current = None
+
+
+def test_equilibrage_au_rythme(tmp_path, monkeypatch):
+    import time as _t
+
+    from jarvis.usage import UsageTracker
+
+    u = UsageTracker(tmp_path / "u.json", openai_budget=100)
+    assert u.mode() == "equilibre"
+    # 60 % du quota consommé alors que seulement 10 % de la fenêtre de 5 h est écoulée : trop vite.
+    u.claude_status("allowed", 0.6, _t.time() + 4.5 * 3600)
+    assert u.claude_pressure() > 0.4 and u.mode() == "menager_claude"
+    # Même consommation, mais 90 % de la fenêtre écoulée : au rythme.
+    u.claude_status("allowed", 0.6, _t.time() + 0.5 * 3600)
+    assert u.mode() == "equilibre"
+
+
+class _ToolClaude(_FakeClaude):
+    def __init__(self, memory):
+        super().__init__(memory)
+        self.registry, self.executed = registry, []
+
+    def _execute(self, block):
+        self.executed.append(block.name)
+        return {"content": "Il est 10 h 42."}
+
+
+def test_chatgpt_utilise_ses_outils_selon_l_equilibre(config, memory, tmp_path):
+    import time as _t
+
+    from jarvis import usage
+    from jarvis.brain_gpt import ConversationBrain
+    from jarvis.usage import UsageTracker
+
+    config.openai_api_key = "sk-test"
+    usage.current = UsageTracker(tmp_path / "u.json", openai_budget=100)
+    try:
+        claude = _ToolClaude(memory)
+        brain = ConversationBrain(config, claude, session=None)
+        names = lambda mode: {t["function"]["name"] for t in brain._tools(mode)}
+        normal, econome = names("equilibre"), names("menager_claude")
+        assert "claude" in normal and "claude" in econome
+        assert "run_command" not in normal and "run_command" in econome  # confirmation : seulement en économie
+        assert "codex_task" not in econome
+        # ChatGPT appelle lui-même un outil, sans passer par Claude.
+        call = {"index": 0, "id": "t1", "function": {"name": sorted(normal - {"claude"})[0], "arguments": "{}"}}
+        brain.http = _FakeOpenAI(_SSE([_delta(tool_calls=[call])]), _SSE([_delta(content="Voilà.")]))
+        assert brain.ask("Fais-le") == "Voilà."
+        assert claude.executed and claude.orders == []
+        # Dépenses OpenAI en avance sur le mois : Claude prend la conversation.
+        usage.current.openai_budget = 0.000001
+        usage.current.record("gpt", 1000, 1000)
+        usage.current.claude_status("allowed", 0.1, _t.time() + 4 * 3600)
+        assert usage.current.mode() == "menager_openai"
+        assert brain.ask("Salut") == claude.reply and claude.orders == ["Salut"]
+    finally:
+        usage.current = None

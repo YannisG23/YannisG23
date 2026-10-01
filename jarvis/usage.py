@@ -17,6 +17,11 @@ from typing import Any
 # Compteur partagé de la session (posé par le noyau), lu par les cerveaux et les outils.
 current: "UsageTracker | None" = None
 
+# Durée des fenêtres de quota Claude, en secondes.
+WINDOWS = {"five_hour": 5 * 3600, "seven_day": 7 * 86400, "seven_day_opus": 7 * 86400}
+# Avance tolérée sur le rythme avant de rééquilibrer (0,15 = 15 points d'avance).
+PACE_MARGIN = 0.15
+
 # Seuil d'utilisation du quota Claude (fenêtre en cours) à partir duquel on économise.
 CLAUDE_ECONOMY_AT = 0.75
 
@@ -59,10 +64,11 @@ class UsageTracker:
             b["cost"] = round(b["cost"] + float(cost or 0.0), 6)
             self._save()
 
-    def claude_status(self, status: str, utilization: float | None, resets_at: float | None) -> None:
+    def claude_status(self, status: str, utilization: float | None, resets_at: float | None,
+                      window: str = "five_hour") -> None:
         with self._lock:
-            self.data["claude"] = {"status": status, "utilization": utilization,
-                                   "resets_at": resets_at, "at": time.time()}
+            self.data["claude"] = {"status": status, "utilization": utilization, "resets_at": resets_at,
+                                   "window": window or "five_hour", "at": time.time()}
             self._save()
 
     # ---------------------------------------------------------------- lecture
@@ -103,6 +109,35 @@ class UsageTracker:
         util = info.get("utilization")
         return info.get("status") in {"allowed_warning", "rejected"} or (util is not None and util >= CLAUDE_ECONOMY_AT)
 
+    # ---------------------------------------------------------- rythme et équilibrage
+
+    def claude_pressure(self) -> float:
+        """Avance de la consommation Claude sur le temps écoulé de la fenêtre (0 = pile au rythme, > 0 = trop vite)."""
+        info = self.data.get("claude") or {}
+        util, resets = info.get("utilization"), info.get("resets_at")
+        if util is None or not resets or resets < time.time():
+            return 0.0
+        length = WINDOWS.get(info.get("window") or "five_hour", WINDOWS["five_hour"])
+        elapsed = min(1.0, max(0.0, 1 - (resets - time.time()) / length))
+        return float(util) - elapsed
+
+    def openai_pressure(self) -> float:
+        """Avance des dépenses OpenAI du mois sur le calendrier (0 = au rythme, > 0 = trop vite)."""
+        if self.openai_budget <= 0:
+            return 0.0
+        now = datetime.now()
+        days = (datetime(now.year + now.month // 12, now.month % 12 + 1, 1) - datetime(now.year, now.month, 1)).days
+        elapsed = (now.day - 1 + now.hour / 24) / days
+        return self.month("gpt")["cost"] / self.openai_budget - elapsed
+
+    def mode(self) -> str:
+        """« equilibre », « menager_claude » (Claude consomme trop vite) ou « menager_openai »."""
+        claude = 1.0 if self.claude_tight else self.claude_pressure()
+        openai = 1.0 if self.openai_over_budget else self.openai_pressure()
+        if claude <= PACE_MARGIN and openai <= PACE_MARGIN:
+            return "equilibre"
+        return "menager_claude" if claude >= openai else "menager_openai"
+
     def summary(self) -> dict[str, Any]:
         info = self.data.get("claude") or {}
         return {
@@ -112,6 +147,7 @@ class UsageTracker:
             "gpt": {"today": self.today("gpt"), "month": self.month("gpt"), "budget": self.openai_budget,
                     "over_budget": self.openai_over_budget},
             "codex": {"today": self.today("codex")},
+            "mode": self.mode(),
         }
 
     def spoken(self) -> str:
@@ -130,4 +166,7 @@ class UsageTracker:
         g = s["gpt"]
         parts.append(f"OpenAI : {g['month']['cost']:.2f} $ ce mois-ci sur un budget de {g['budget']:.0f} $")
         parts.append(f"Codex : {int(s['codex']['today']['calls'])} tâches aujourd'hui")
+        parts.append({"equilibre": "Répartition équilibrée entre Claude et ChatGPT",
+                      "menager_claude": "Claude consomme vite : ChatGPT prend davantage de tâches",
+                      "menager_openai": "Dépenses OpenAI en avance : Claude prend davantage la main"}[s["mode"]])
         return ". ".join(parts) + "."

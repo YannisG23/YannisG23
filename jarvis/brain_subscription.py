@@ -427,7 +427,8 @@ class SubscriptionBrain(Brain):
                 if usage.current is not None:
                     resets_at = getattr(info, "resets_at", None)
                     usage.current.claude_status(getattr(info, "status", "") or "", getattr(info, "utilization", None),
-                                                float(resets_at) if isinstance(resets_at, (int, float)) else None)
+                                                float(resets_at) if isinstance(resets_at, (int, float)) else None,
+                                                getattr(info, "rate_limit_type", None) or "five_hour")
                 if getattr(message.rate_limit_info, "status", "") == "rejected":
                     # On lit la réponse jusqu'au bout avant de signaler l'erreur, sinon ses
                     # derniers messages arriveraient au tour suivant.

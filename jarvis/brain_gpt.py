@@ -35,17 +35,29 @@ GPT_RULES = """# Comment tu fonctionnes
 Tu es la voix et la conversation de {name}. Tu parles à {user} à l'oral : phrases courtes et naturelles,
 pas de markdown, pas de liste, pas d'émoji.
 
-Tu n'as qu'un seul outil : « claude », ton second cerveau, qui a accès au PC de {user}, à ses fichiers,
-ses e-mails, son agenda, la mémoire à long terme, internet, les routines, Codex, le son, l'écran…
-- Dès que la demande exige une action, une information que tu n'as pas (météo, heure exacte d'un
-  rendez-vous, contenu d'un fichier, actualité…), ou de retenir/oublier quelque chose, appelle « claude »
-  avec une consigne complète et autonome (il ne voit pas cette conversation : donne le contexte utile).
-- Tout ce que la description ci-dessous présente comme un outil, tu le fais faire par « claude ».
-- Avant d'appeler « claude » pour quelque chose qui peut prendre du temps, dis une très courte phrase
-  (« Je m'en occupe. »). Ensuite, rapporte le résultat en une ou deux phrases, sans répéter ce que tu as déjà dit.
-- Pour une simple conversation, une question de culture générale ou un conseil, réponds toi-même, vite.
-- Ne dis jamais « Claude » ou « ChatGPT » à {user} sauf s'il te le demande : pour lui, tu es {name}.
+Tu travailles en binôme avec « claude », ton second cerveau, qui a accès à tout (PC, fichiers, e-mails,
+agenda, mémoire, internet, routines, Codex, écran…) et qui est le spécialiste des tâches longues, du
+raisonnement en plusieurs étapes et du code. Tu as aussi tes propres outils, listés à côté.
+- Conversation, culture générale, conseil : réponds toi-même, vite.
+- Une action ou une information couverte par tes propres outils : utilise-les toi-même.
+- Appelle « claude » (consigne complète et autonome : il ne voit pas cette conversation) quand aucun de tes
+  outils ne convient, pour une tâche en plusieurs étapes, pour du code ou Claude Code, ou dès que {user}
+  demande explicitement Claude.
+{balance}
+- Avant une action qui peut prendre du temps, dis une très courte phrase (« Je m'en occupe. »), puis
+  rapporte le résultat en une ou deux phrases.
+- Ne dis pas « Claude » ou « ChatGPT » à {user} sauf s'il te le demande : pour lui, tu es {name}.
 """
+
+BALANCE_RULES = {
+    "equilibre": "- Répartition normale : garde « claude » pour ce qui le mérite vraiment.",
+    "menager_claude": "- IMPORTANT : le quota de Claude part trop vite en ce moment. Fais tout ce que tu peux avec "
+                      "tes outils (tu les as tous) ; n'appelle « claude » que si {user} le demande explicitement "
+                      "ou si la tâche est vraiment hors de ta portée.",
+}
+
+# Outils trop lourds pour être confiés à ChatGPT même en mode économie de Claude.
+GPT_EXCLUDED_TOOLS = {"codex_task"}
 
 CLAUDE_TOOL = {
     "type": "function",
@@ -138,9 +150,28 @@ class ConversationBrain:
 
     # ------------------------------------------------------------------ conversation
 
-    def _system(self) -> str:
+    def _mode(self) -> str:
+        return usage.current.mode() if usage.current is not None else "equilibre"
+
+    def _tools(self, mode: str) -> list[dict[str, Any]]:
+        """Outils de ChatGPT selon l'équilibre : les simples (sans confirmation) en temps normal,
+        presque tous quand Claude consomme trop vite. « claude » reste toujours disponible."""
+        tools = [CLAUDE_TOOL]
+        registry = getattr(self.claude, "registry", None)
+        if registry is None:
+            return tools
+        for name in sorted(registry.tools):
+            tool = registry.tools[name]
+            if name in GPT_EXCLUDED_TOOLS or (mode != "menager_claude" and tool.confirm is not None):
+                continue
+            tools.append({"type": "function", "function": {
+                "name": name, "description": tool.description, "parameters": tool.input_schema}})
+        return tools
+
+    def _system(self, mode: str = "equilibre") -> str:
         persona, profile = (block["text"] for block in self.claude.system)
-        rules = GPT_RULES.format(name=self.config.assistant_name, user=self.config.user_name)
+        balance = BALANCE_RULES.get(mode, BALANCE_RULES["equilibre"]).format(user=self.config.user_name)
+        rules = GPT_RULES.format(name=self.config.assistant_name, user=self.config.user_name, balance=balance)
         conso = f"\n\n# Consommation actuelle (si {self.config.user_name} la demande)\n{usage.current.spoken()}" \
             if usage.current is not None else ""
         return f"{rules}\n\n{persona}\n\n{profile}{conso}"
@@ -156,12 +187,17 @@ class ConversationBrain:
         content = f"[{spoken_timestamp(datetime.now())}] {text}{self.claude._recall_block(text)}"
         start = len(self.history)
         self.history.append({"role": "user", "content": content})
+        mode = self._mode()
         try:
-            reply = self._run(on_sentence, on_delta)
+            if mode == "menager_openai":
+                # Dépenses OpenAI en avance sur le mois : Claude prend la conversation pour l'instant.
+                raise GptUnavailable("dépenses OpenAI en avance sur le budget du mois")
+            reply = self._run(on_sentence, on_delta, mode)
             self._set_brain("chatgpt")
         except GptUnavailable as exc:
             del self.history[start:]
-            self.emit("error", {"message": f"ChatGPT indisponible ({exc}) : Claude prend le relais."})
+            if mode != "menager_openai":
+                self.emit("error", {"message": f"ChatGPT indisponible ({exc}) : Claude prend le relais."})
             self._set_brain("claude")
             reply = self.claude.ask(text, on_sentence, on_delta)
             self.history += [{"role": "user", "content": content}, {"role": "assistant", "content": reply}]
@@ -175,19 +211,20 @@ class ConversationBrain:
         self.memory.log("assistant", reply, self.session_id)
         return reply
 
-    def _run(self, on_sentence, on_delta) -> str:
+    def _run(self, on_sentence, on_delta, mode: str = "equilibre") -> str:
         spoken: list[str] = []
+        all_tools = self._tools(mode)
         for _round in range(MAX_TOOL_ROUNDS + 1):
-            tools = [CLAUDE_TOOL] if _round < MAX_TOOL_ROUNDS else None
-            text, calls = self._stream(tools, on_sentence, on_delta)
+            tools = all_tools if _round < MAX_TOOL_ROUNDS else None
+            text, calls = self._stream(tools, on_sentence, on_delta, mode)
             if text:
                 spoken.append(text)
             if not calls:
                 return " ".join(spoken).strip()
             self.history.append({"role": "assistant", "content": text or None, "tool_calls": calls})
             for call in calls:
-                self.history.append({"role": "tool", "tool_call_id": call["id"],
-                                     "content": self._call_claude(call)})
+                handler = self._call_claude if call["function"]["name"] == "claude" else self._call_tool
+                self.history.append({"role": "tool", "tool_call_id": call["id"], "content": handler(call)})
         return " ".join(spoken).strip()
 
     def _call_claude(self, call: dict[str, Any]) -> str:
@@ -211,6 +248,23 @@ class ConversationBrain:
             raise Interrupted("Interrompu.")
         return result or "C'est fait."
 
+    def _call_tool(self, call: dict[str, Any]) -> str:
+        """ChatGPT utilise directement un outil de Jarvis (mêmes validations et confirmations que Claude)."""
+        from types import SimpleNamespace
+
+        try:
+            args = json.loads(call["function"]["arguments"] or "{}")
+        except json.JSONDecodeError:
+            return "Arguments illisibles : réessaie."
+        block = SimpleNamespace(id=call["id"], name=call["function"]["name"], input=args)
+        result = self.claude._execute(block)
+        if self._cancel:
+            raise Interrupted("Interrompu.")
+        content = result.get("content")
+        if isinstance(content, list):
+            content = "\n".join(b.get("text", "[image]") for b in content if isinstance(b, dict))
+        return str(content or "C'est fait.")
+
     def _request(self, payload: dict[str, Any]):
         if not self.config.openai_api_key:
             raise GptUnavailable("clé OPENAI_API_KEY absente")
@@ -229,12 +283,12 @@ class ConversationBrain:
             raise GptUnavailable(f"erreur {response.status_code} {detail}".strip())
         return response
 
-    def _stream(self, tools, on_sentence, on_delta) -> tuple[str, list[dict[str, Any]]]:
+    def _stream(self, tools, on_sentence, on_delta, mode: str = "equilibre") -> tuple[str, list[dict[str, Any]]]:
         if usage.current is not None and usage.current.openai_over_budget:
             raise GptUnavailable(f"budget OpenAI du mois atteint ({usage.current.openai_budget:.0f} $)")
         payload: dict[str, Any] = {
             "model": self.config.gpt_model,
-            "messages": [{"role": "system", "content": self._system()}, *self.history],
+            "messages": [{"role": "system", "content": self._system(mode)}, *self.history],
             "stream": True,
             "stream_options": {"include_usage": True},
         }
