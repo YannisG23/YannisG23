@@ -638,7 +638,7 @@ export default function App() {
         silence()
         const t = createSpeaker()
         speaker.current = t
-        t.say('Test audio. Si tu m'entends, la voix fonctionne.')
+        t.say("Test audio. Si tu m'entends, la voix fonctionne.")
         void t.end().then(() => {
           const d = (window as unknown as Record<string, Record<string, unknown>>).__tts
           console.info('[jarvis] audio test →', d)

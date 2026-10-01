@@ -42,7 +42,11 @@ gpu = [
 app = [
     "pywebview>=5",
 ]
-all = ["jarvis[voice,google,app]"]
+# Serveur MCP (python -m jarvis.mcp_server) : branche ce Jarvis dans Jarvis 2.
+mcp = [
+    "mcp>=1.2",
+]
+all = ["jarvis[voice,google,app,mcp]"]
 dev = ["pytest>=8"]
 
 [project.scripts]
