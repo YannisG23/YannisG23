@@ -177,6 +177,13 @@ function score(v: SpeechSynthesisVoice): number {
   const n = v.name.toLowerCase()
   let s = 0
 
+  // Yannis parle français : une voix fr-FR passe avant tout, les voix
+  // naturelles de Windows (Microsoft Henri / Remy / Denise « Online ») en tête.
+  if (/^fr[-_]fr/i.test(v.lang)) s += 100
+  else if (/^fr/i.test(v.lang)) s += 70
+  if (/online|natural|neural|multilingual/.test(n)) s += 30
+  if (/\b(henri|remy|rémy|claude|antoine|paul|julie|denise|eloise|vivienne)\b/.test(n)) s += 10
+
   // The macOS British male, and the closest thing to the character available
   // without leaving the machine.
   if (n.startsWith('daniel')) s += 100
@@ -212,7 +219,7 @@ const USABLE = 40
 export function candidateVoices(): SpeechSynthesisVoice[] {
   return speechSynthesis
     .getVoices()
-    .filter((v) => /^en/i.test(v.lang))
+    .filter((v) => /^(fr|en)/i.test(v.lang))
     .map((v) => ({ v, s: score(v) }))
     .filter((x) => x.s >= USABLE)
     .sort((a, b) => b.s - a.s)
@@ -236,7 +243,7 @@ function pickVoice(): SpeechSynthesisVoice | null {
     localStorage.removeItem(VOICE_PREF_KEY)
   }
 
-  cachedVoice = candidateVoices()[0] ?? all.find((v) => /^en/i.test(v.lang)) ?? null
+  cachedVoice = candidateVoices()[0] ?? all.find((v) => /^fr/i.test(v.lang)) ?? all.find((v) => /^en/i.test(v.lang)) ?? null
   return cachedVoice
 }
 
@@ -477,7 +484,7 @@ export function createSpeaker(): Speaker {
       const u = new SpeechSynthesisUtterance(text)
       const voice = pickVoice()
       if (voice) u.voice = voice
-      u.lang = voice?.lang ?? 'en-GB'
+      u.lang = voice?.lang ?? 'fr-FR'
       // Deliberate, and deliberately invariant — the character's pace does not
       // change with stakes, and that steadiness is most of the effect. This
       // lands around 130 wpm, below the median for film dialogue.
