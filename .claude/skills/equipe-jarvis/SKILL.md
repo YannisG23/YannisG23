@@ -20,12 +20,13 @@ La feuille de route de Yannis est dans `docs/ROADMAP.md` : lis-la. Fonctionnel >
 
 ## Règles communes
 
-1. Toute session du projet porte l'étiquette `jarvis` : c'est ce qui la range dans le groupe Jarvis de la barre latérale. Titre : « Jarvis : <rôle ou sujet> ».
-2. Yannis est débutant et parle français : on lui écrit en français simple. Une commande à taper est donnée en entier, en précisant le terminal (PowerShell ou cmd ; `irm` n'existe que dans PowerShell ; dans cmd, `cd /d J:\...` pour changer de disque).
-3. On ne touche jamais au fichier `.env` ni à `%USERPROFILE%\.jarvis` (mémoire, état, nom choisi) sans l'accord explicite de Yannis.
-4. Pas de pull request sans demande de Yannis. Les commits se terminent par les lignes d'attribution demandées par la session.
-5. Le quota de l'abonnement est partagé avec Jarvis lui-même : toutes les sessions tournent avec Sonnet (cloud comme PC, le quota est commun), le gros modèle seulement si Yannis le demande ; missions courtes, et pas deux sessions PC dans le même dossier en même temps. Les suivis automatiques (send_later) sont autorisés mais espacés (10 à 20 min).
-6. Avant de pousser : `PYTHONPATH=. .venv/bin/python -m pytest -q tests` (ou `.venv\Scripts\python -m pytest -q tests` sous Windows) doit passer. Chaque correction ajoute un test quand c'est possible.
+1. On n'archive jamais une session le jour même : Yannis veut pouvoir y jeter un œil. Le chef de projet fait le ménage le lendemain matin.
+2. Toute session du projet porte l'étiquette `jarvis` : c'est ce qui la range dans le groupe Jarvis de la barre latérale. Titre : « Jarvis : <rôle ou sujet> ».
+3. Yannis est débutant et parle français : on lui écrit en français simple. Une commande à taper est donnée en entier, en précisant le terminal (PowerShell ou cmd ; `irm` n'existe que dans PowerShell ; dans cmd, `cd /d J:\...` pour changer de disque).
+4. On ne touche jamais au fichier `.env` ni à `%USERPROFILE%\.jarvis` (mémoire, état, nom choisi) sans l'accord explicite de Yannis.
+5. Pas de pull request sans demande de Yannis. Les commits se terminent par les lignes d'attribution demandées par la session.
+6. Le quota de l'abonnement est partagé avec Jarvis lui-même : toutes les sessions tournent avec Sonnet (cloud comme PC, le quota est commun), le gros modèle seulement si Yannis le demande ; missions courtes, et pas deux sessions PC dans le même dossier en même temps. Les suivis automatiques (send_later) sont autorisés mais espacés (10 à 20 min).
+7. Avant de pousser : `PYTHONPATH=. .venv/bin/python -m pytest -q tests` (ou `.venv\Scripts\python -m pytest -q tests` sous Windows) doit passer. Chaque correction ajoute un test quand c'est possible.
 
 ## Sur le PC (sessions PC)
 
