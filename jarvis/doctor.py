@@ -165,6 +165,16 @@ def _edge_voice(config: Config) -> str:
     return "voix neuronale en ligne"
 
 
+def _stt_online(config: Config) -> str:
+    import numpy as np
+
+    from .voice.listen import transcribe_openai
+
+    started = time.monotonic()
+    transcribe_openai(np.zeros(16000, dtype=np.int16), config.openai_api_key, config.stt_model, config.language)
+    return f"{config.stt_model}, réponse en {time.monotonic() - started:.1f} s"
+
+
 def _whisper(config: Config) -> str:
     import numpy as np
 
@@ -276,6 +286,10 @@ def run_doctor(config: Config) -> int:
         check.run("Reconnaissance vocale (Whisper)", lambda: _whisper(config),
                   "Le premier chargement télécharge le modèle : il faut internet. "
                   "Essaie JARVIS_WHISPER_MODEL=base si ton PC est lent.")
+        if config.stt == "openai":
+            check.run("Transcription en ligne (OpenAI)", lambda: _stt_online(config),
+                      "Vérifie OPENAI_API_KEY et le crédit du compte API ; en attendant, Whisper local prend le relais.",
+                      optional=True)
         if config.wake_by_name:
             check.run("Activation", lambda: f"dis simplement « {config.assistant_name}, … » (mode nom)")
         else:

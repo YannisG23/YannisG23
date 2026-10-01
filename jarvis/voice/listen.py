@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 import queue
 import re
@@ -13,6 +14,8 @@ import numpy as np
 
 SAMPLE_RATE = 16000
 FRAME = 1280  # 80 ms, la taille attendue par openWakeWord
+# Prix de la transcription en ligne, en dollars par minute d'audio.
+STT_PRICES = {"gpt-4o-mini-transcribe": 0.003, "gpt-4o-transcribe": 0.006, "whisper-1": 0.006}
 
 # Phrases que Whisper « entend » parfois dans le silence ou le bruit.
 _HALLUCINATIONS = re.compile(
@@ -63,11 +66,48 @@ def load_whisper(name: str) -> tuple[object, str]:
     return model, "cpu"
 
 
+def to_wav(audio: np.ndarray) -> bytes:
+    """Audio 16 kHz mono int16 → fichier WAV en mémoire."""
+    import wave
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(SAMPLE_RATE)
+        wav.writeframes(audio.astype(np.int16).tobytes())
+    return buffer.getvalue()
+
+
+def transcribe_openai(audio: np.ndarray, api_key: str, model: str, language: str, prompt: str = "") -> str:
+    """Transcription en ligne d'OpenAI (clé API, facturée à la minute d'audio)."""
+    import requests
+
+    data = {"model": model, "language": language}
+    if prompt:
+        data["prompt"] = prompt
+    response = requests.post(
+        "https://api.openai.com/v1/audio/transcriptions",
+        headers={"Authorization": f"Bearer {api_key}"},
+        files={"file": ("phrase.wav", to_wav(audio), "audio/wav")},
+        data=data,
+        timeout=15,
+    )
+    response.raise_for_status()
+    return str(response.json().get("text", "")).strip()
+
+
 class Listener:
     def __init__(self, whisper_model: str, language: str, wake_threshold: float = 0.5,
-                 use_wake_model: bool = True, name: str = "") -> None:
+                 use_wake_model: bool = True, name: str = "", openai_key: str = "",
+                 stt_model: str = "gpt-4o-mini-transcribe", on_warning=None) -> None:
         import sounddevice as sd
 
+        # Transcription en ligne (plus fiable) si une clé est fournie ; Whisper local en secours.
+        self.openai_key = openai_key
+        self.stt_model = stt_model
+        self.on_warning = on_warning or (lambda message: None)
+        self._online_failures = 0
         self.language = language
         self.wake_threshold = wake_threshold
         self.stt, self.device = load_whisper(whisper_model)
@@ -158,12 +198,44 @@ class Listener:
     def speech_threshold(self) -> float:
         return max(self.noise_floor * 3.0, 250.0)
 
-    def record_utterance(self, start_timeout: float = 6.0, max_seconds: float = 20.0,
-                         end_silence: float = 0.9) -> np.ndarray | None:
-        """Enregistre une phrase : attend qu'on parle, puis s'arrête après un silence."""
+    def speech_onset(self, timeout: float = 0.3, min_speech: float = 0.3) -> np.ndarray | None:
+        """Pendant qu'il parle : détecte qu'on lui parle (au moins min_speech secondes de voix).
+
+        Renvoie le début de la phrase (pour ne pas le perdre), ou None. Au casque, sa propre voix
+        n'arrive pas dans le micro : toute voix entendue est celle de l'utilisateur.
+        """
         threshold = self.speech_threshold
+        frame_seconds = FRAME / SAMPLE_RATE
         frames: list[np.ndarray] = []
-        started = False
+        loud_for, gap = 0.0, 0
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline or frames:
+            frame = self._next_frame(timeout=0.2)
+            if frame is None:
+                return None
+            self._observe(frame, adapt=False)
+            if self.level > threshold:
+                frames.append(frame)
+                loud_for += frame_seconds
+                gap = 0
+                if loud_for >= min_speech:
+                    return np.concatenate(frames)
+            elif frames:
+                gap += 1
+                frames.append(frame)
+                if gap > 2:  # plus de 160 ms de silence : un bruit bref, pas une phrase
+                    frames, loud_for, gap = [], 0.0, 0
+        return None
+
+    def record_utterance(self, start_timeout: float = 6.0, max_seconds: float = 20.0,
+                         end_silence: float = 0.9, prefix: np.ndarray | None = None) -> np.ndarray | None:
+        """Enregistre une phrase : attend qu'on parle, puis s'arrête après un silence.
+
+        prefix : début de phrase déjà capté (on enchaîne directement sur la suite).
+        """
+        threshold = self.speech_threshold
+        frames: list[np.ndarray] = [prefix] if prefix is not None else []
+        started = prefix is not None
         silent_for = 0.0
         waited = 0.0
         frame_seconds = FRAME / SAMPLE_RATE
@@ -184,11 +256,49 @@ class Listener:
                 continue
             frames.append(frame)
             silent_for = 0.0 if loud else silent_for + frame_seconds
-            if silent_for >= end_silence or len(frames) * frame_seconds >= max_seconds:
+            if silent_for >= end_silence or sum(len(f) for f in frames) / SAMPLE_RATE >= max_seconds:
                 return np.concatenate(frames)
 
+    @property
+    def online(self) -> bool:
+        """Transcription en ligne utilisable (clé présente, budget OpenAI pas dépassé)."""
+        if not self.openai_key or self._online_failures >= 3:
+            return False
+        from .. import usage
+
+        return usage.current is None or not usage.current.openai_over_budget
+
+    @property
+    def precise_is_cheap(self) -> bool:
+        """Une transcription soignée ne coûte qu'une fraction de seconde (en ligne ou carte graphique)."""
+        return self.online or self.device == "cuda"
+
+    def _transcribe_online(self, audio: np.ndarray) -> str | None:
+        try:
+            text = transcribe_openai(audio, self.openai_key, self.stt_model, self.language,
+                                     prompt=f"{self.name}," if self.name else "")
+        except Exception as exc:
+            self._online_failures += 1
+            if self._online_failures == 3:
+                self.on_warning(f"Transcription en ligne indisponible ({exc}) : je repasse sur Whisper local.")
+            return None
+        self._online_failures = 0
+        from .. import usage
+
+        if usage.current is not None:
+            minutes = len(audio) / SAMPLE_RATE / 60
+            usage.current.record("stt", cost=minutes * STT_PRICES.get(self.stt_model, 0.006))
+        return "" if _HALLUCINATIONS.search(text) else text
+
     def transcribe(self, audio: np.ndarray, fast: bool = False) -> str:
-        """fast=True : passe rapide, pour repérer le nom dans ce qui se dit autour du micro."""
+        """fast=True : passe rapide sur le PC, pour repérer le nom dans ce qui se dit autour du micro.
+
+        Sinon (une vraie demande) : transcription en ligne si possible, Whisper local en secours.
+        """
+        if not fast and self.online:
+            text = self._transcribe_online(audio)
+            if text is not None:
+                return text
         segments, _ = self.stt.transcribe(
             audio.astype(np.float32) / 32768.0,
             language=self.language,

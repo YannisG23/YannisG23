@@ -72,7 +72,7 @@ Mets une clé API OpenAI dans `.env` (`OPENAI_API_KEY=sk-...`, créée sur platf
 
 ### Consommation et équilibrage
 
-Jarvis mesure ce qu'il consomme (panneau Système de l'appli, ou « où en est ma consommation ? ») : pourcentage réel du quota Claude et heure de réinitialisation, dépenses OpenAI du mois face à `JARVIS_OPENAI_BUDGET`, tâches Codex.
+Jarvis mesure ce qu'il consomme (panneau Système de l'appli, ou « où en est ma consommation ? ») : pourcentage réel du quota Claude et heure de réinitialisation, dépenses OpenAI du mois (conversation + transcription) face à `JARVIS_OPENAI_BUDGET`, tâches Codex.
 
 Il répartit le travail **au rythme**, en continu, plutôt que d'épuiser un cerveau avant de passer à l'autre :
 - **équilibré** : ChatGPT converse et fait lui-même les actions simples (outils sans confirmation) ; Claude garde les tâches en plusieurs étapes, le code, Claude Code et tout ce que tu lui demandes explicitement.
@@ -137,6 +137,7 @@ Une routine est un enchaînement que Jarvis sait refaire à la demande : « **mo
 | `JARVIS_VOICE` | Voix (`edge-tts --list-voices`) | `fr-FR-RemyMultilingualNeural` |
 | `JARVIS_VOICE_RATE` | Débit de parole | `+5%` |
 | `JARVIS_WHISPER_MODEL` | Précision de l'écoute : `base`, `small`, `medium`, `large-v3` | `small` |
+| `JARVIS_STT` | Écoute des demandes : `auto` (en ligne OpenAI si clé, Whisper en secours), `local` | `auto` |
 | `JARVIS_NAME` | Impose un nom dès le départ (sinon il choisit le sien au premier lancement). Un nom donné à la voix l'emporte sur ce réglage. | `Jarvis` en attendant |
 | `JARVIS_NAME_ALIASES` | Autres orthographes du nom que la transcription pourrait écrire | vide |
 | `JARVIS_WAKE_MODE` | `nom` (l'appeler par son nom) ou `hey` (« Hey Jarvis », seule formule de ce mode, plus léger pour le PC) | `nom` |
@@ -149,7 +150,7 @@ Une routine est un enchaînement que Jarvis sait refaire à la demande : « **mo
 
 | `JARVIS_TTS` | Voix : `edge` (gratuite) ou `elevenlabs` (premium) | `edge` |
 | `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID` | Clé et voix ElevenLabs | voix « Daniel » |
-| `JARVIS_BARGE_IN` | Lui couper la parole en l'appelant | `1` |
+| `JARVIS_BARGE_IN` | Lui couper la parole : `voix` (parler suffit, au casque), `nom` (l'appeler), `0` | `voix` |
 
 Autres voix naturelles en français : `fr-FR-VivienneMultilingualNeural`, `fr-FR-HenriNeural`, `fr-FR-DeniseNeural`, `fr-CA-ThierryNeural`.
 Pour des réponses plus rapides : `JARVIS_EFFORT=low`. Avec une carte graphique NVIDIA, Whisper l'utilise automatiquement, et `medium` ou `large-v3` deviennent confortables.
@@ -173,7 +174,7 @@ Ce mode abonnement est prévu pour **ton usage personnel**, sur ton PC et avec t
 - **macOS** : autorise, pour ton terminal, le micro, l'*Accessibilité* (touches média) et l'*Enregistrement de l'écran* (« regarde mon écran »).
 - **Port occupé** : change `JARVIS_DASHBOARD_PORT`.
 - **« Je n'arrive pas à joindre Claude »** : ferme-le, double-clique sur `connexion.bat`, puis relance `jarvis.bat`. Si ça continue, lance `diagnostic.bat` et envoie ce qu'il affiche : le détail de l'erreur s'y trouve (il est aussi dans l'onglet Activité et dans `~/.jarvis/erreurs.log`). Les commandes `python -m jarvis …` se tapent dans un terminal, pas dans le centre de commande.
-- **Il se coupe tout seul pendant qu'il parle** : il a cru s'entendre appeler dans sa propre voix. Utilise un casque, ou mets `JARVIS_BARGE_IN=0`.
+- **Il se coupe tout seul pendant qu'il parle** : il s'entend lui-même dans le micro (enceintes). Utilise un casque, ou mets `JARVIS_BARGE_IN=nom` (il faut alors l'appeler) ou `0`.
 
 ## Architecture
 

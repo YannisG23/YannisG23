@@ -87,10 +87,10 @@ class VoiceLoop:
         found, command = self.spotter.find(heard)
         if not found:
             return False, ""
-        # Sur le processeur, une deuxième transcription coûterait plusieurs secondes : on garde la première.
-        if getattr(self.listener, "device", "cuda") != "cuda":
+        # Sur le processeur seul, une deuxième transcription coûterait plusieurs secondes : on garde la première.
+        if not getattr(self.listener, "precise_is_cheap", True):
             return True, command
-        # Sur la carte graphique, c'est quasi instantané : transcription soignée de la demande.
+        # En ligne ou sur la carte graphique, c'est rapide : transcription soignée de la demande.
         precise = self.listener.transcribe(audio)
         found_again, precise_command = self.spotter.find(precise)
         return True, precise_command if found_again else command
@@ -108,10 +108,20 @@ class VoiceLoop:
         return False, ""
 
     def _interrupted(self) -> tuple[bool, str]:
-        """Pendant qu'il parle ou réfléchit : l'appeler le coupe."""
-        if not self.core.config.barge_in:
+        """Pendant qu'il parle ou réfléchit : lui parler (mode « voix ») ou l'appeler (mode « nom ») le coupe."""
+        mode = self.core.config.barge_in
+        if mode in {"off", False}:
             self.listener.drain()  # ne pas s'entendre soi-même
             return False, ""
+        if mode == "voix" and self.core.speaker.speaking:
+            onset = self.listener.speech_onset(timeout=0.3)
+            if onset is None:
+                return False, ""
+            # On le fait taire tout de suite, puis on écoute la phrase jusqu'au bout.
+            self.core.stop_speaking()
+            audio = self.listener.record_utterance(start_timeout=0.5, prefix=onset)
+            text = self.listener.transcribe(audio) if audio is not None else ""
+            return True, text
         if self.spotter:
             return self._overheard(max_seconds=5)
         if self.listener.has_wake_word:
@@ -152,6 +162,8 @@ class VoiceLoop:
                 core.bus.publish("barge_in")
                 if command:
                     core.submit(command, "voice")
+                elif self.core.config.barge_in == "voix":
+                    core.awaiting_follow_up = True  # rien de compris : il écoute la suite sans qu'on le rappelle
                 else:
                     self._push_to_talk.set()  # écoute dès que la réponse abandonnée est close
             return

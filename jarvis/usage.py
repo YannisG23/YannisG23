@@ -53,7 +53,8 @@ class UsageTracker:
         return day.setdefault(provider, {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cost": 0.0})
 
     def record(self, provider: str, tokens_in: int = 0, tokens_out: int = 0, cost: float | None = None) -> None:
-        """provider : « claude », « gpt » ou « codex ». cost en dollars (calculé pour gpt si absent)."""
+        """provider : « claude », « gpt », « stt » (transcription OpenAI) ou « codex ». cost en dollars
+        (calculé pour gpt si absent)."""
         if cost is None and provider == "gpt":
             cost = (tokens_in * self.price_in + tokens_out * self.price_out) / 1_000_000
         with self._lock:
@@ -87,9 +88,13 @@ class UsageTracker:
     def month(self, provider: str) -> dict[str, float]:
         return self._sum(provider, datetime.now().strftime("%Y-%m"))
 
+    def openai_month_cost(self) -> float:
+        """Dépense OpenAI du mois : conversation + transcription de la voix."""
+        return self.month("gpt")["cost"] + self.month("stt")["cost"]
+
     @property
     def openai_over_budget(self) -> bool:
-        return self.openai_budget > 0 and self.month("gpt")["cost"] >= self.openai_budget
+        return self.openai_budget > 0 and self.openai_month_cost() >= self.openai_budget
 
     @property
     def claude_utilization(self) -> float | None:
@@ -128,7 +133,7 @@ class UsageTracker:
         now = datetime.now()
         days = (datetime(now.year + now.month // 12, now.month % 12 + 1, 1) - datetime(now.year, now.month, 1)).days
         elapsed = (now.day - 1 + now.hour / 24) / days
-        return self.month("gpt")["cost"] / self.openai_budget - elapsed
+        return self.openai_month_cost() / self.openai_budget - elapsed
 
     def mode(self) -> str:
         """« equilibre », « menager_claude » (Claude consomme trop vite) ou « menager_openai »."""
@@ -145,7 +150,8 @@ class UsageTracker:
                        "status": info.get("status"), "resets_at": info.get("resets_at"),
                        "economy": self.claude_tight},
             "gpt": {"today": self.today("gpt"), "month": self.month("gpt"), "budget": self.openai_budget,
-                    "over_budget": self.openai_over_budget},
+                    "over_budget": self.openai_over_budget, "stt_month": self.month("stt")["cost"],
+                    "month_total": round(self.openai_month_cost(), 4)},
             "codex": {"today": self.today("codex")},
             "mode": self.mode(),
         }
@@ -164,7 +170,7 @@ class UsageTracker:
         if s["claude"]["economy"]:
             parts.append("mode économie actif")
         g = s["gpt"]
-        parts.append(f"OpenAI : {g['month']['cost']:.2f} $ ce mois-ci sur un budget de {g['budget']:.0f} $")
+        parts.append(f"OpenAI : {g['month_total']:.2f} $ ce mois-ci sur un budget de {g['budget']:.0f} $")
         parts.append(f"Codex : {int(s['codex']['today']['calls'])} tâches aujourd'hui")
         parts.append({"equilibre": "Répartition équilibrée entre Claude et ChatGPT",
                       "menager_claude": "Claude consomme vite : ChatGPT prend davantage de tâches",

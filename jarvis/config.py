@@ -66,13 +66,17 @@ class Config:
     openai_voice_instructions: str = field(default_factory=lambda: _env(
         "OPENAI_VOICE_INSTRUCTIONS",
         "Parle en français naturel, sur un ton chaleureux et détendu, comme un ami attentionné."))
-    # Couper la parole à l'assistant en l'appelant pendant qu'il parle.
-    barge_in: bool = field(
-        default_factory=lambda: _env("JARVIS_BARGE_IN", "1").lower() not in {"0", "false", "non", "no"}
-    )
+    # Couper la parole à l'assistant pendant qu'il parle : « voix » (il suffit de parler : idéal au casque),
+    # « nom » (il faut l'appeler par son nom : à préférer avec des enceintes) ou « 0 » (jamais).
+    barge_in: str = field(default_factory=lambda: _env("JARVIS_BARGE_IN", "voix").lower())
     # Activation : « nom » (dire son nom, naturellement) ou « hey » (« Hey Jarvis », plus léger pour le PC).
     wake_mode: str = field(default_factory=lambda: _env("JARVIS_WAKE_MODE", "nom").lower())
     whisper_model: str = field(default_factory=lambda: _env("JARVIS_WHISPER_MODEL", "small"))
+    # Reconnaissance de la parole : « auto » = transcription en ligne d'OpenAI (bien plus fiable, ~0,003 $
+    # la minute) dès qu'une clé OPENAI_API_KEY est présente, Whisper sur le PC en secours ; « local » pour
+    # tout garder sur le PC. Le nom, lui, est toujours repéré sur le PC : rien ne part tant qu'on ne l'appelle pas.
+    stt: str = field(default_factory=lambda: _env("JARVIS_STT", "auto").lower())
+    stt_model: str = field(default_factory=lambda: _env("JARVIS_STT_MODEL", "gpt-4o-mini-transcribe"))
     wake_threshold: float = field(default_factory=lambda: float(_env("JARVIS_WAKE_THRESHOLD", "0.5")))
     follow_up_seconds: float = field(default_factory=lambda: float(_env("JARVIS_FOLLOW_UP_SECONDS", "6")))
     # Micro et sortie audio : vide = ceux par défaut de Windows ; sinon un numéro ou un bout du nom.
@@ -112,6 +116,16 @@ class Config:
     def __post_init__(self) -> None:
         if self.tts_engine in {"auto", ""}:
             self.tts_engine = "elevenlabs" if self.elevenlabs_api_key else "edge"
+        if self.barge_in in {"1", "true", "oui", "yes", ""}:
+            self.barge_in = "voix"
+        elif self.barge_in in {"0", "false", "non", "no", "off"}:
+            self.barge_in = "off"
+        elif self.barge_in not in {"voix", "nom"}:
+            self.barge_in = "voix"
+        if self.stt in {"auto", ""}:
+            self.stt = "openai" if self.openai_api_key else "local"
+        elif self.stt == "openai" and not self.openai_api_key:
+            self.stt = "local"
         if self.codex_delegation not in {"off", "auto", "max"}:
             self.codex_delegation = "auto"
         self.home.mkdir(parents=True, exist_ok=True)

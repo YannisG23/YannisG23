@@ -116,7 +116,10 @@ def _start_voice(config: Config, core: Core):
     try:
         with console.status("[bright_blue]Chargement de la reconnaissance vocale…[/]"):
             listener = Listener(config.whisper_model, config.language, config.wake_threshold,
-                                use_wake_model=not config.wake_by_name, name=config.assistant_name)
+                                use_wake_model=not config.wake_by_name, name=config.assistant_name,
+                                openai_key=config.openai_api_key if config.stt == "openai" else "",
+                                stt_model=config.stt_model,
+                                on_warning=lambda message: core.bus.publish("error", {"message": message}))
     except Exception as exc:
         console.print(f"[red]Micro ou reconnaissance vocale indisponible : {escape(str(exc))}[/]\n"
                       "[yellow]Je continue au clavier et dans le centre de commande. "

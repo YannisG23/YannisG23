@@ -1403,3 +1403,111 @@ def test_un_seul_jarvis_a_la_fois(config):
         config.dashboard_port = busy.getsockname()[1]
         assert _already_running(config)
     assert not _already_running(config)
+
+
+# ---------------------------------------------------------------- écoute en ligne et coupure à la voix
+
+def _bare_listener(frames, online_key=""):
+    """Listener sans micro ni Whisper : on lui injecte les trames audio."""
+    import queue
+
+    from jarvis.voice.listen import Listener
+
+    listener = Listener.__new__(Listener)
+    listener._frames = queue.Queue()
+    for frame in frames:
+        listener._frames.put(frame)
+    listener.noise_floor, listener.level, listener.wake = 100.0, 0.0, None
+    listener.openai_key, listener.stt_model, listener._online_failures = online_key, "gpt-4o-mini-transcribe", 0
+    listener.language, listener.name, listener.device = "fr", "Jarvis", "cpu"
+    listener.on_warning = lambda message: None
+    return listener
+
+
+def test_config_ecoute_et_coupure(monkeypatch, tmp_path):
+    monkeypatch.setenv("JARVIS_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    for value, expected in (("1", "voix"), ("0", "off"), ("nom", "nom"), ("n'importe", "voix")):
+        monkeypatch.setenv("JARVIS_BARGE_IN", value)
+        assert Config().barge_in == expected
+    monkeypatch.setenv("JARVIS_STT", "auto")
+    assert Config().stt == "local"  # pas de clé : tout reste sur le PC
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    assert Config().stt == "openai"
+    monkeypatch.setenv("JARVIS_STT", "local")
+    assert Config().stt == "local"
+
+
+def test_debut_de_parole_detecte_et_phrase_complete():
+    import numpy as np
+
+    loud = np.full(1280, 3000, dtype=np.int16)
+    quiet = np.zeros(1280, dtype=np.int16)
+    # Un claquement bref (une trame) puis du silence : pas une phrase.
+    assert _bare_listener([loud, quiet, quiet, quiet, quiet]).speech_onset(timeout=0.05) is None
+    # Une vraie prise de parole : le début est gardé, puis la suite est enregistrée jusqu'au silence.
+    listener = _bare_listener([loud] * 6 + [quiet] * 15)
+    onset = listener.speech_onset(timeout=0.05)
+    assert onset is not None and len(onset) >= 4 * 1280
+    audio = listener.record_utterance(start_timeout=0.5, prefix=onset)
+    assert len(audio) > len(onset)
+
+
+def test_transcription_en_ligne_puis_secours_local(monkeypatch, tmp_path):
+    import numpy as np
+
+    from jarvis import usage
+    from jarvis.usage import UsageTracker
+    from jarvis.voice import listen
+
+    monkeypatch.setattr(usage, "current", UsageTracker(tmp_path / "usage.json", openai_budget=10))
+    listener = _bare_listener([], online_key="sk-test")
+    listener.stt = SimpleNamespace(transcribe=lambda *a, **k: ([SimpleNamespace(text="texte local")], None))
+    audio = np.zeros(16000 * 60, dtype=np.int16)  # une minute
+
+    monkeypatch.setattr(listen, "transcribe_openai", lambda *a, **k: "Jarvis, mets du rap")
+    assert listener.transcribe(audio) == "Jarvis, mets du rap"
+    assert round(usage.current.month("stt")["cost"], 4) == 0.003  # compté dans le budget OpenAI
+    assert listener.transcribe(audio, fast=True) == "texte local"  # repérage du nom : toujours sur le PC
+
+    def down(*a, **k):
+        raise OSError("réseau coupé")
+
+    monkeypatch.setattr(listen, "transcribe_openai", down)
+    assert listener.transcribe(audio) == "texte local"  # secours : Whisper local
+    # Budget dépassé : plus rien ne part en ligne.
+    usage.current.record("gpt", cost=20)
+    assert not listener.online
+
+
+def test_couper_la_parole_a_la_voix(config, memory):
+    import numpy as np
+
+    from jarvis.voice.loop import VoiceLoop
+
+    class Listener:
+        has_wake_word, wake_threshold, level = False, 0.5, 0.0
+
+        def speech_onset(self, timeout):
+            return np.ones(6000, dtype=np.int16)
+
+        def record_utterance(self, start_timeout, prefix=None, max_seconds=20):
+            return np.concatenate([prefix, np.ones(8000, dtype=np.int16)])
+
+        def transcribe(self, audio, fast=False):
+            return "attends, plutôt la météo de demain"
+
+        def drain(self):
+            pass
+
+    config.barge_in = "voix"
+    core = Core(config, memory=memory, client=FakeClient())
+    events, submitted, stops = [], [], []
+    core.bus.publish = lambda kind, data=None: events.append(kind)
+    core.submit = lambda text, source="text": submitted.append((text, source))
+    core.stop_speaking = lambda: stops.append(1)
+    core.speaker = SimpleNamespace(speaking=True)
+    loop = VoiceLoop(core, Listener())
+    loop._step()
+    assert stops and "barge_in" in events
+    assert submitted == [("attends, plutôt la météo de demain", "voice")]

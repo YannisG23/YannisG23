@@ -705,7 +705,7 @@ function renderUsage(u) {
   if (c.resets_at) claude += ` · retour ${new Date(c.resets_at * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
   if (c.economy) claude += " · mode économie";
   $("v-claude").textContent = claude;
-  const spent = (g.month || {}).cost || 0, budget = g.budget || 0;
+  const spent = g.month_total ?? ((g.month || {}).cost || 0), budget = g.budget || 0;
   $("m-gpt").style.width = budget ? Math.min(100, Math.round((spent / budget) * 100)) + "%" : "0%";
   $("v-gpt").textContent = `${spent.toFixed(2)} $ / ${budget.toFixed(0)} $` + (g.over_budget ? " · budget atteint" : "");
   $("v-codex").textContent = `${(x.today || {}).calls || 0} tâches`;
