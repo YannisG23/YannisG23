@@ -7,6 +7,10 @@ description: Règles de travail en équipe des sessions Claude sur le projet Jar
 
 Jarvis est l'assistant vocal personnel de Yannis (Python, dossier `jarvis/`). Plusieurs sessions Claude s'y partagent le travail.
 
+## Priorités
+
+La feuille de route de Yannis est dans `docs/ROADMAP.md` : lis-la. Fonctionnel > parfait, pas de refonte, pas de fonctionnalité hors des objectifs, réutiliser l'open source avant de coder.
+
 ## Les rôles
 
 - **Chef de projet** : session cloud « Jarvis : chef de projet ». Répartit les tâches, relit, fusionne et pousse sur `claude/jarvis-personnel-bfhr70`. C'est la seule branche que Yannis installe.
