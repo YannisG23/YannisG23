@@ -58,6 +58,10 @@ Le lien du centre de commande s'affiche dans le terminal (`http://127.0.0.1:8765
 
 Au premier lancement de la matinée, Jarvis te fait un briefing (météo, agenda, e-mails, tâches) au lieu d'un simple bonjour (`JARVIS_DAILY_BRIEFING=0` pour le désactiver).
 
+### Ses consignes (comment il se comporte)
+
+Comme un mode d'emploi, Jarvis relit à chaque conversation le fichier `~/.jarvis/consignes.md` (sous Windows : `C:\Users\<toi>\.jarvis\consignes.md`). Une consigne par ligne, commençant par `- `. Tu peux l'ouvrir et le modifier à la main, ou lui dire « À partir de maintenant, … », « Arrête de … », « Quelles sont tes consignes ? », « Retire la consigne 3 ». C'est différent de sa mémoire (les faits sur toi).
+
 ### Connecter Gmail et Google Agenda (optionnel)
 
 1. Va sur https://console.cloud.google.com, crée un projet, puis active **Gmail API** et **Google Calendar API**.

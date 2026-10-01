@@ -14,6 +14,7 @@ const TOKEN = (() => {
 const $ = (id) => document.getElementById(id);
 const STATE_LABELS = { idle: "En veille", listening: "J'écoute", thinking: "Je réfléchis", speaking: "Je parle" };
 const TOOL_LABELS = {
+  add_rule: "Nouvelle consigne", list_rules: "Mes consignes", remove_rule: "Je retire une consigne",
   remember: "Je retiens", recall: "Je cherche dans ma mémoire", update_memory: "Je corrige ma mémoire",
   forget: "J'oublie", search_conversations: "Je relis nos conversations", add_task: "Tâche ajoutée",
   list_tasks: "Tes tâches", complete_task: "Tâche terminée", open_application: "J'ouvre l'application",

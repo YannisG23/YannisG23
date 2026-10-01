@@ -1563,3 +1563,30 @@ def test_chatgpt_se_souvient_de_sa_reponse(config, memory):
     roles = [m["role"] for m in http.payloads[1]["messages"]]
     assert roles == ["system", "user", "assistant", "user"]
     assert http.payloads[1]["messages"][2]["content"] == "Je t'entends parfaitement."
+
+
+# ---------------------------------------------------------------- consignes de comportement
+
+def test_consignes_fichier_et_outils(config, memory):
+    from jarvis import rules
+    from jarvis.tools import ToolContext, registry
+
+    defaults = rules.load(config)  # crée le fichier avec les consignes de départ
+    assert defaults and rules.path(config).exists()
+    ctx = ToolContext(config=config, memory=memory)
+    assert "enregistrée" in registry.tools["add_rule"].func(ctx, rule="Appelle-moi chef")
+    rules.add(config, "appelle-moi chef")  # pas de doublon
+    assert rules.load(config)[-1] == "Appelle-moi chef" and len(rules.load(config)) == len(defaults) + 1
+    listing = registry.tools["list_rules"].func(ctx)
+    assert f"{len(defaults) + 1}. Appelle-moi chef" in listing
+    assert "supprimée" in registry.tools["remove_rule"].func(ctx, number=len(defaults) + 1)
+    assert rules.load(config) == defaults
+
+
+def test_consignes_dans_le_prompt(config, memory):
+    from jarvis import rules
+
+    rules.add(config, "Ne parle jamais de foot")
+    core = Core(config, memory=memory, client=FakeClient())
+    profile = core.brain.system[1]["text"]
+    assert "# Tes consignes" in profile and "Ne parle jamais de foot" in profile

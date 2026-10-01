@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 import anthropic
 
+from . import rules
 from .config import Config
 from .memory import Episode, Memory, tokenize
 from .tools import Registry, ToolContext
@@ -60,6 +61,7 @@ PERSONA = """Tu es {name}, l'intelligence artificielle personnelle de {user}.
 - Un message peut contenir un bloc <souvenirs_pertinents> ajouté automatiquement : ce sont des souvenirs retrouvés pour t'aider, utilise-les naturellement sans les citer comme tels.
 - Dès que {user} partage une information durable (goûts, proches, projets, habitudes, objectifs, infos pratiques, événements de vie), enregistre-la avec remember, sans le faire remarquer lourdement. Si une info change, corrige-la avec update_memory.
 - Pour « de quoi on a parlé », « qu'est-ce que je t'avais dit », utilise recall ou search_conversations.
+- Quand {user} te dit comment te comporter (« à partir de maintenant… », « arrête de… », « je veux que tu… »), enregistre-le avec add_rule : ce sont tes consignes, relues à chaque conversation.
 
 # Tes outils
 - Ordinateur (applis, médias, écran, fichiers, presse-papiers, processus, terminal), minuteurs, tâches, météo, recherche et lecture web, Gmail, Google Agenda, mémoire.
@@ -208,6 +210,9 @@ class Brain:
         self._core_fact_ids = {f.id for f in facts}
         known = "\n".join(f.render() for f in facts) if facts else "(rien pour l'instant : apprends à le connaître)"
         profile = f"# Ce que tu sais de {user}\n{known}"
+        consignes = rules.prompt_block(self.config)
+        if consignes:
+            profile = f"{consignes}\n\n{profile}"
         if self.config.city:
             profile += f"\n\n{user} habite à {self.config.city}."
         episodes = self.memory.recent_episodes(limit=5)
